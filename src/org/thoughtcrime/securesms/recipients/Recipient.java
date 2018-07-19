@@ -16,7 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.thoughtcrime.securesms.recipients;
-
+//Wichtig:Eliminate the concept of 'Recipients' (plural). There is now just
+//a 'Recipient', which contains an Address that is either an individual
+//or a group ID.
+//
+//MMS groups now exist as part of the group database, just like push
+//groups.
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -262,7 +267,7 @@ public class Recipient implements RecipientModifiedListener {
     if (this.name == null && isMmsGroupRecipient()) {
       List<String> names = new LinkedList<>();
 
-      for (Recipient recipient : participants) {
+      for (Recipient recipient : participants) { //FAlls EMpfänger=Gruppe hole Liste der Empfänger
         names.add(recipient.toShortString());
       }
 

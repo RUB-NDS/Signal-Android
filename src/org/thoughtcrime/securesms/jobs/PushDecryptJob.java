@@ -167,7 +167,7 @@ public class PushDecryptJob extends ContextJob {
 
   private void handleMessage(SignalServiceEnvelope envelope, Optional<Long> smsMessageId) {
     try {
-      GroupDatabase        groupDatabase = DatabaseFactory.getGroupDatabase(context);
+      GroupDatabase        groupDatabase = DatabaseFactory.getGroupDatabase(context);//Wichtig: hole Gruppendatenbankeintrag
       SignalProtocolStore  axolotlStore  = new SignalProtocolStoreImpl(context);
       SignalServiceAddress localAddress  = new SignalServiceAddress(TextSecurePreferences.getLocalNumber(context));
       SignalServiceCipher  cipher        = new SignalServiceCipher(localAddress, axolotlStore);
@@ -179,13 +179,14 @@ public class PushDecryptJob extends ContextJob {
         boolean                  isMediaMessage = message.getAttachments().isPresent() || message.getQuote().isPresent() || message.getSharedContacts().isPresent();
 
         if      (message.isEndSession())        handleEndSessionMessage(envelope, message, smsMessageId);
-        else if (message.isGroupUpdate())       handleGroupMessage(envelope, message, smsMessageId);
+        else if (message.isGroupUpdate())       handleGroupMessage(envelope, message, smsMessageId);//WIchtig: falls Nachricht Gruppenupdate-> handleGroupMessage
+
         else if (message.isExpirationUpdate())  handleExpirationUpdate(envelope, message, smsMessageId);
         else if (isMediaMessage)                handleMediaMessage(envelope, message, smsMessageId);
         else if (message.getBody().isPresent()) handleTextMessage(envelope, message, smsMessageId);
 
         if (message.getGroupInfo().isPresent() && groupDatabase.isUnknownGroup(GroupUtil.getEncodedId(message.getGroupInfo().get().getGroupId(), false))) {
-          handleUnknownGroupMessage(envelope, message.getGroupInfo().get());
+          handleUnknownGroupMessage(envelope, message.getGroupInfo().get()); //behandle Gruppennachricht mit unbekannter Gruppe
         }
 
         if (message.getProfileKey().isPresent() && message.getProfileKey().get().length == 32) {
@@ -362,7 +363,7 @@ public class PushDecryptJob extends ContextJob {
 
     long threadId = DatabaseFactory.getThreadDatabase(context).getThreadIdFor(recipient);
 
-    if (!recipient.isGroupRecipient()) {
+    if (!recipient.isGroupRecipient()) { //Wichtig: Nur wenn Empfänger nicht Gruppe
       SessionStore sessionStore = new TextSecureSessionStore(context);
       sessionStore.deleteAllSessions(recipient.getAddress().toPhoneString());
 
@@ -377,18 +378,18 @@ public class PushDecryptJob extends ContextJob {
     return threadId;
   }
 
-  private void handleGroupMessage(@NonNull SignalServiceEnvelope envelope,
+  private void handleGroupMessage(@NonNull SignalServiceEnvelope envelope, //Wichtig: Behandle Gruppennachricht
                                   @NonNull SignalServiceDataMessage message,
                                   @NonNull Optional<Long> smsMessageId)
       throws MmsException
   {
-    GroupMessageProcessor.process(context, envelope, message, false);
+    GroupMessageProcessor.process(context, envelope, message, false); //Rufe GroupMessageProcessor auf
 
     if (message.getExpiresInSeconds() != 0 && message.getExpiresInSeconds() != getMessageDestination(envelope, message).getExpireMessages()) {
       handleExpirationUpdate(envelope, message, Optional.absent());
     }
 
-    if (smsMessageId.isPresent()) {
+    if (smsMessageId.isPresent()) {//Falls smsMessageID existiert -> Lösche aus Datenbank
       DatabaseFactory.getSmsDatabase(context).deleteMessage(smsMessageId.get());
     }
   }
@@ -434,14 +435,14 @@ public class PushDecryptJob extends ContextJob {
                                             @NonNull SentTranscriptMessage message)
       throws MmsException
   {
-    GroupDatabase groupDatabase = DatabaseFactory.getGroupDatabase(context);
+    GroupDatabase groupDatabase = DatabaseFactory.getGroupDatabase(context); //Wichtig: hole Gruppendatenbankeintrag
 
     Long threadId;
 
-    if (message.getMessage().isEndSession()) {
-      threadId = handleSynchronizeSentEndSessionMessage(message);
-    } else if (message.getMessage().isGroupUpdate()) {
-      threadId = GroupMessageProcessor.process(context, envelope, message.getMessage(), true);
+    if (message.getMessage().isEndSession()) { //falls Nachricht Beenden iniziieren soll
+      threadId = handleSynchronizeSentEndSessionMessage(message);//behandle SynchronizeSentEndSession
+    } else if (message.getMessage().isGroupUpdate()) {//Falls Nachricht Gruppenupdate
+      threadId = GroupMessageProcessor.process(context, envelope, message.getMessage(), true); //threadID = GroupMessageProcessor
     } else if (message.getMessage().isExpirationUpdate()) {
       threadId = handleSynchronizeSentExpirationUpdate(message);
     } else if (message.getMessage().getAttachments().isPresent() || message.getMessage().getQuote().isPresent()) {
@@ -451,7 +452,7 @@ public class PushDecryptJob extends ContextJob {
     }
 
     if (message.getMessage().getGroupInfo().isPresent() && groupDatabase.isUnknownGroup(GroupUtil.getEncodedId(message.getMessage().getGroupInfo().get().getGroupId(), false))) {
-      handleUnknownGroupMessage(envelope, message.getMessage().getGroupInfo().get());
+      handleUnknownGroupMessage(envelope, message.getMessage().getGroupInfo().get());//Wichtig: BEHANDLE Nachricht für unbekannte GRuppe
     }
 
     if (message.getMessage().getProfileKey().isPresent()) {
@@ -459,7 +460,7 @@ public class PushDecryptJob extends ContextJob {
 
       if      (message.getDestination().isPresent())            recipient = Recipient.from(context, Address.fromExternal(context, message.getDestination().get()), false);
       else if (message.getMessage().getGroupInfo().isPresent()) recipient = Recipient.from(context, Address.fromSerialized(GroupUtil.getEncodedId(message.getMessage().getGroupInfo().get().getGroupId(), false)), false);
-
+        //Wichtig: Falls Nachricht ist GroupInfo, hole Empfänger durch GruppenID
 
       if (recipient != null && !recipient.isSystemContact() && !recipient.isProfileSharing()) {
         DatabaseFactory.getRecipientDatabase(context).setProfileSharing(recipient, true);
@@ -482,7 +483,7 @@ public class PushDecryptJob extends ContextJob {
                         .add(new MultiDeviceContactUpdateJob(getContext(), true));
     }
 
-    if (message.isGroupsRequest()) {
+    if (message.isGroupsRequest()) { //Wichtig: FAlls Nachricht GroupsREquest ist: new MultiDEvideGroupUpdateJob
       ApplicationContext.getInstance(context)
                         .getJobManager()
                         .add(new MultiDeviceGroupUpdateJob(getContext()));
@@ -685,13 +686,14 @@ public class PushDecryptJob extends ContextJob {
     MessagingDatabase database;
     long              messageId;
 
-    if (recipient.getAddress().isGroup()) {
+    if (recipient.getAddress().isGroup()) {//Wichtig: Wenn EMpfänger=Gruppe-> erzeuge neue OutgoingSecureMediaMessage(new outgoingMediaMessage)
+
       OutgoingMediaMessage outgoingMediaMessage = new OutgoingMediaMessage(recipient, new SlideDeck(), body, message.getTimestamp(), -1, expiresInMillis, ThreadDatabase.DistributionTypes.DEFAULT, null, Collections.emptyList());
       outgoingMediaMessage = new OutgoingSecureMediaMessage(outgoingMediaMessage);
 
       messageId = DatabaseFactory.getMmsDatabase(context).insertMessageOutbox(outgoingMediaMessage, threadId, false, null);
       database  = DatabaseFactory.getMmsDatabase(context);
-    } else {
+    } else { //Wenn Empfänger nicht Gruppe: -> erzeuge neue outgoingTextMessage als outgoing
       OutgoingTextMessage outgoingTextMessage = new OutgoingEncryptedMessage(recipient, body, expiresInMillis);
 
       messageId = DatabaseFactory.getSmsDatabase(context).insertMessageOutbox(threadId, outgoingTextMessage, false, message.getTimestamp(), null);

@@ -50,27 +50,27 @@ public class GroupMessageProcessor {
                                        @NonNull SignalServiceEnvelope envelope,
                                        @NonNull SignalServiceDataMessage message,
                                        boolean outgoing)
-  {
+  {//Wichtig: Nur Nachrichten mit GroupID oder nicht ex. groupInfo akzeptiert
     if (!message.getGroupInfo().isPresent() || message.getGroupInfo().get().getGroupId() == null) {
       Log.w(TAG, "Received group message with no id! Ignoring...");
       return null;
     }
-
+ //Wichtig: Rufe Gruppendatenbank auf, hole groupInfo, GroupID, (GroupRecord)
     GroupDatabase         database = DatabaseFactory.getGroupDatabase(context);
     SignalServiceGroup    group    = message.getGroupInfo().get();
     String                id       = GroupUtil.getEncodedId(group.getGroupId(), false);
     Optional<GroupRecord> record   = database.getGroup(id);
 
-    if (record.isPresent() && group.getType() == Type.UPDATE) {
-      return handleGroupUpdate(context, envelope, group, record.get(), outgoing);
-    } else if (!record.isPresent() && group.getType() == Type.UPDATE) {
-      return handleGroupCreate(context, envelope, group, outgoing);
-    } else if (record.isPresent() && group.getType() == Type.QUIT) {
-      return handleGroupLeave(context, envelope, group, record.get(), outgoing);
-    } else if (record.isPresent() && group.getType() == Type.REQUEST_INFO) {
-      return handleGroupInfoRequest(context, envelope, group, record.get());
+    if (record.isPresent() && group.getType() == Type.UPDATE) { //Wichtig: GroupREcord existiert & Typ=Update
+      return handleGroupUpdate(context, envelope, group, record.get(), outgoing); //GroupUpdate mit hole Record
+    } else if (!record.isPresent() && group.getType() == Type.UPDATE) {// GroupRecord existiert nicht und Typ=Update
+      return handleGroupCreate(context, envelope, group, outgoing); //GroupUpdate ohne hole Record
+    } else if (record.isPresent() && group.getType() == Type.QUIT) { //Record existiert und Typ=Quit
+      return handleGroupLeave(context, envelope, group, record.get(), outgoing); //Behandle Gruppe verlassen
+    } else if (record.isPresent() && group.getType() == Type.REQUEST_INFO) { //Record existiert und Typ=Info
+      return handleGroupInfoRequest(context, envelope, group, record.get()); //Behandle Gruppenauskunft
     } else {
-      Log.w(TAG, "Received unknown type, ignoring...");
+      Log.w(TAG, "Received unknown type, ignoring..."); //sonst ignoriere
       return null;
     }
   }
@@ -83,22 +83,22 @@ public class GroupMessageProcessor {
     GroupDatabase        database = DatabaseFactory.getGroupDatabase(context);
     String               id       = GroupUtil.getEncodedId(group.getGroupId(), false);
     GroupContext.Builder builder  = createGroupContext(group);
-    builder.setType(GroupContext.Type.UPDATE);
+    builder.setType(GroupContext.Type.UPDATE); //Wichtig: Setze Typ auf Update
 
     SignalServiceAttachment avatar  = group.getAvatar().orNull();
     List<Address>           members = group.getMembers().isPresent() ? new LinkedList<Address>() : null;
 
-    if (group.getMembers().isPresent()) {
+    if (group.getMembers().isPresent()) { //Wichtig: Erzeuge Liste der Mitglieder
       for (String member : group.getMembers().get()) {
         members.add(Address.fromExternal(context, member));
       }
     }
-
+//erzeuge Datenbankeintrag
     database.create(id, group.getName().orNull(), members,
                     avatar != null && avatar.isPointer() ? avatar.asPointer() : null,
                     envelope.getRelay());
 
-    return storeMessage(context, envelope, group, builder.build(), outgoing);
+    return storeMessage(context, envelope, group, builder.build(), outgoing); 
   }
 
   private static @Nullable Long handleGroupUpdate(@NonNull Context context,
@@ -127,7 +127,7 @@ public class GroupMessageProcessor {
     GroupContext.Builder builder = createGroupContext(group);
     builder.setType(GroupContext.Type.UPDATE);
 
-    if (addedMembers.size() > 0) {
+    if (addedMembers.size() > 0) {//Wichtig: Fuege neue Mitgleider hinzu
       Set<Address> unionMembers = new HashSet<>(recordMembers);
       unionMembers.addAll(messageMembers);
       database.updateMembers(id, new LinkedList<>(unionMembers));
@@ -203,13 +203,13 @@ public class GroupMessageProcessor {
                                              @NonNull GroupContext storage,
                                              boolean  outgoing)
   {
-    if (group.getAvatar().isPresent()) {
+    if (group.getAvatar().isPresent()) { //Wichtig: Falls Avatar existiert downloaden
       ApplicationContext.getInstance(context).getJobManager()
                         .add(new AvatarDownloadJob(context, group.getGroupId()));
     }
 
-    try {
-      if (outgoing) {
+    try { //Wichtig: Falls Outgoing==true setze: mmsDatabase und Recipient aus Context, Adresse aus Context und encoded GroupID
+      if (outgoing) { //erzeuge neue ausgehende Gruppennachricht, setze ThreadID und MessageID
         MmsDatabase               mmsDatabase     = DatabaseFactory.getMmsDatabase(context);
         Address                   addres          = Address.fromExternal(context, GroupUtil.getEncodedId(group.getGroupId(), false));
         Recipient                 recipient       = Recipient.from(context, addres, false);
@@ -217,10 +217,10 @@ public class GroupMessageProcessor {
         long                      threadId        = DatabaseFactory.getThreadDatabase(context).getThreadIdFor(recipient);
         long                      messageId       = mmsDatabase.insertMessageOutbox(outgoingMessage, threadId, false, null);
 
-        mmsDatabase.markAsSent(messageId, true);
+        mmsDatabase.markAsSent(messageId, true); //markiere Nachricht als gesendet
 
         return threadId;
-      } else {
+      } else { //Wichtig: falls Outgoing==false: hole smsDatabase, encodiere body, erzeuge incomingTextMessage und incommingGroupMessage
         SmsDatabase          smsDatabase  = DatabaseFactory.getSmsDatabase(context);
         String               body         = Base64.encodeBytes(storage.toByteArray());
         IncomingTextMessage  incoming     = new IncomingTextMessage(Address.fromExternal(context, envelope.getSource()), envelope.getSourceDevice(), envelope.getTimestamp(), body, Optional.of(group), 0);

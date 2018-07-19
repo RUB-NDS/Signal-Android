@@ -1,5 +1,5 @@
 package org.thoughtcrime.securesms.profiles;
-
+//wichtig: Abfrage, ob man Profilname und Foto mit Gruppe teilen möchte
 
 import android.content.Context;
 import android.os.Build;

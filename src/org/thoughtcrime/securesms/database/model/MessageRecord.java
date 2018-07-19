@@ -87,7 +87,7 @@ public abstract class MessageRecord extends DisplayRecord {
   }
 
   @Override
-  public SpannableString getDisplayBody() {
+  public SpannableString getDisplayBody() { //Wichtig: Auswahl der anzuzeigenden/zu sendenden Benachrichtigung
     if (isGroupUpdate() && isOutgoing()) {
       return new SpannableString(context.getString(R.string.MessageRecord_you_updated_group));
     } else if (isGroupUpdate()) {

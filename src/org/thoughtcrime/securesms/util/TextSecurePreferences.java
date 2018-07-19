@@ -955,6 +955,8 @@ public class TextSecurePreferences {
   }
 
   public static String getStringPreference(Context context, String key, String defaultValue) {
+
+
     return PreferenceManager.getDefaultSharedPreferences(context).getString(key, defaultValue);
   }
 

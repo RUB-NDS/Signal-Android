@@ -345,9 +345,9 @@ public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity 
 
       List<RecipientDeliveryStatus> recipients = new LinkedList<>();
 
-      if (!messageRecord.getRecipient().isGroupRecipient()) {
+      if (!messageRecord.getRecipient().isGroupRecipient()) { //Wichtig: Wenn aktueller kein Gruppenempfänger-> Empfänger, Auslieferungszähler, Gelesen-Zähler, Ausstehend-Zähler in neuen Empfänger-delivery-state
         recipients.add(new RecipientDeliveryStatus(messageRecord.getRecipient(), getStatusFor(messageRecord.getDeliveryReceiptCount(), messageRecord.getReadReceiptCount(), messageRecord.isPending()), -1));
-      } else {
+      } else { //Sonst: Wenn Empfänger-Info-Liste leer: hole Gruppenmitgliederliste, setze für jeden Status UNKNOWN; Empfäger-INfo-Liste nicht leer: hole aktuellen Status für jedes Mitlgied
         List<GroupReceiptInfo> receiptInfoList = DatabaseFactory.getGroupReceiptDatabase(context).getGroupReceiptInfo(messageRecord.getId());
 
         if (receiptInfoList.isEmpty()) {
@@ -397,7 +397,7 @@ public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity 
       else                               return RecipientDeliveryStatus.Status.PENDING;
     }
 
-    private RecipientDeliveryStatus.Status getStatusFor(int groupStatus, boolean pending) {
+    private RecipientDeliveryStatus.Status getStatusFor(int groupStatus, boolean pending) { // Wichtig: GRuppenstatusabfrage
       if      (groupStatus == GroupReceiptDatabase.STATUS_READ)                    return RecipientDeliveryStatus.Status.READ;
       else if (groupStatus == GroupReceiptDatabase.STATUS_DELIVERED)               return RecipientDeliveryStatus.Status.DELIVERED;
       else if (groupStatus == GroupReceiptDatabase.STATUS_UNDELIVERED && !pending) return RecipientDeliveryStatus.Status.SENT;

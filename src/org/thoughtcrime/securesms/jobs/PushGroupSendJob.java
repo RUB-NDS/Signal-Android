@@ -162,12 +162,12 @@ public class PushGroupSendJob extends PushSendJob implements InjectableType {
     if (filterAddress != null) addresses = getPushAddresses(filterAddress);
     else                       addresses = getPushAddresses(recipients);
 
-    if (message.isGroup()) {
-      OutgoingGroupMediaMessage groupMessage     = (OutgoingGroupMediaMessage) message;
-      GroupContext              groupContext     = groupMessage.getGroupContext();
-      SignalServiceAttachment   avatar           = attachmentStreams.isEmpty() ? null : attachmentStreams.get(0);
-      SignalServiceGroup.Type   type             = groupMessage.isGroupQuit() ? SignalServiceGroup.Type.QUIT : SignalServiceGroup.Type.UPDATE;
-      SignalServiceGroup        group            = new SignalServiceGroup(type, GroupUtil.getDecodedId(groupId), groupContext.getName(), groupContext.getMembersList(), avatar);
+    if (message.isGroup()) { //Wichtig: Falls Nachricht GRuppennachricht
+      OutgoingGroupMediaMessage groupMessage     = (OutgoingGroupMediaMessage) message; //Typumwandlung in OutgoingGroupMediaMessage
+      GroupContext              groupContext     = groupMessage.getGroupContext(); //hole Gruppenkontext
+      SignalServiceAttachment   avatar           = attachmentStreams.isEmpty() ? null : attachmentStreams.get(0); //
+      SignalServiceGroup.Type   type             = groupMessage.isGroupQuit() ? SignalServiceGroup.Type.QUIT : SignalServiceGroup.Type.UPDATE; //Setze GroupQuit oder Update
+      SignalServiceGroup        group            = new SignalServiceGroup(type, GroupUtil.getDecodedId(groupId), groupContext.getName(), groupContext.getMembersList(), avatar);//hole Gruppen-ID, Titel, Mitgliederliste, Avatar
       SignalServiceDataMessage  groupDataMessage = SignalServiceDataMessage.newBuilder()
                                                                            .withTimestamp(message.getSentTimeMillis())
                                                                            .withExpiration(message.getRecipient().getExpireMessages())
