@@ -58,6 +58,8 @@ repositories {
 }
 
 dependencies {
+    compile files('libs/asynchronousratchetingtree-1.0-SNAPSHOT.jar')
+
     compile 'com.android.support:appcompat-v7:27.0.2'
     compile 'com.android.support:recyclerview-v7:27.0.2'
     compile 'com.android.support:design:27.0.2'

@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.thoughtcrime.securesms.database.GroupDatabase.GroupRecord;
@@ -49,6 +50,7 @@ public class GroupMessageProcessor {
   public static @Nullable Long process(@NonNull Context context,
                                        @NonNull SignalServiceEnvelope envelope,
                                        @NonNull SignalServiceDataMessage message,
+                                       SignalART art,
                                        boolean outgoing)
   {//Wichtig: Nur Nachrichten mit GroupID oder nicht ex. groupInfo akzeptiert
     if (!message.getGroupInfo().isPresent() || message.getGroupInfo().get().getGroupId() == null) {
@@ -62,13 +64,13 @@ public class GroupMessageProcessor {
     Optional<GroupRecord> record   = database.getGroup(id);
 
     if (record.isPresent() && group.getType() == Type.UPDATE) { //Wichtig: GroupREcord existiert & Typ=Update
-      return handleGroupUpdate(context, envelope, group, record.get(), outgoing); //GroupUpdate mit hole Record
+      return handleGroupUpdate(context, envelope, group, record.get(), art, outgoing); //GroupUpdate mit hole Record
     } else if (!record.isPresent() && group.getType() == Type.UPDATE) {// GroupRecord existiert nicht und Typ=Update
-      return handleGroupCreate(context, envelope, group, outgoing); //GroupUpdate ohne hole Record
+      return handleGroupCreate(context, envelope, group, art, outgoing); //GroupUpdate ohne hole Record
     } else if (record.isPresent() && group.getType() == Type.QUIT) { //Record existiert und Typ=Quit
-      return handleGroupLeave(context, envelope, group, record.get(), outgoing); //Behandle Gruppe verlassen
+      return handleGroupLeave(context, envelope, group, record.get(), art, outgoing); //Behandle Gruppe verlassen
     } else if (record.isPresent() && group.getType() == Type.REQUEST_INFO) { //Record existiert und Typ=Info
-      return handleGroupInfoRequest(context, envelope, group, record.get()); //Behandle Gruppenauskunft
+      return handleGroupInfoRequest(context, envelope, group, record.get(), art); //Behandle Gruppenauskunft
     } else {
       Log.w(TAG, "Received unknown type, ignoring..."); //sonst ignoriere
       return null;
@@ -78,6 +80,7 @@ public class GroupMessageProcessor {
   private static @Nullable Long handleGroupCreate(@NonNull Context context,
                                                   @NonNull SignalServiceEnvelope envelope,
                                                   @NonNull SignalServiceGroup group,
+                                                  SignalART signalART,
                                                   boolean outgoing)
   {
     GroupDatabase        database = DatabaseFactory.getGroupDatabase(context);
@@ -85,12 +88,18 @@ public class GroupMessageProcessor {
     GroupContext.Builder builder  = createGroupContext(group);
     builder.setType(GroupContext.Type.UPDATE); //Wichtig: Setze Typ auf Update
 
+    BuildART buildART = new BuildART();
+    Map<Integer, byte[]> setupART = buildART.setupART(context, group, database.getGroup(id));
+
     SignalServiceAttachment avatar  = group.getAvatar().orNull();
     List<Address>           members = group.getMembers().isPresent() ? new LinkedList<Address>() : null;
 
+    int memberCount = 0;
     if (group.getMembers().isPresent()) { //Wichtig: Erzeuge Liste der Mitglieder
       for (String member : group.getMembers().get()) {
         members.add(Address.fromExternal(context, member));
+        memberCount +=1;
+        setupART.get(memberCount);
       }
     }
 //erzeuge Datenbankeintrag
@@ -105,7 +114,7 @@ public class GroupMessageProcessor {
                                                   @NonNull SignalServiceEnvelope envelope,
                                                   @NonNull SignalServiceGroup group,
                                                   @NonNull GroupRecord groupRecord,
-                                                  boolean outgoing)
+                                                  SignalART art, boolean outgoing)
   {
 
     GroupDatabase database = DatabaseFactory.getGroupDatabase(context);
@@ -162,7 +171,7 @@ public class GroupMessageProcessor {
   private static Long handleGroupInfoRequest(@NonNull Context context,
                                              @NonNull SignalServiceEnvelope envelope,
                                              @NonNull SignalServiceGroup group,
-                                             @NonNull GroupRecord record)
+                                             @NonNull GroupRecord record, SignalART art)
   {
     if (record.getMembers().contains(Address.fromExternal(context, envelope.getSource()))) {
       ApplicationContext.getInstance(context)
@@ -173,11 +182,11 @@ public class GroupMessageProcessor {
     return null;
   }
 
-  private static Long handleGroupLeave(@NonNull Context               context,
+  private static Long handleGroupLeave(@NonNull Context context,
                                        @NonNull SignalServiceEnvelope envelope,
-                                       @NonNull SignalServiceGroup    group,
-                                       @NonNull GroupRecord           record,
-                                       boolean  outgoing)
+                                       @NonNull SignalServiceGroup group,
+                                       @NonNull GroupRecord record,
+                                       SignalART art, boolean outgoing)
   {
     GroupDatabase database = DatabaseFactory.getGroupDatabase(context);
     String        id       = GroupUtil.getEncodedId(group.getGroupId(), false);
