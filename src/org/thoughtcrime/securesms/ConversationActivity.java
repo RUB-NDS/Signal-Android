@@ -1705,7 +1705,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
   private ListenableFuture<Void> sendMediaMessage(final boolean forceSms, String body, SlideDeck slideDeck, List<Contact> contacts, final long expiresIn, final int subscriptionId, final boolean initiating) {
     OutgoingMediaMessage outgoingMessageCandidate = new OutgoingMediaMessage(recipient, slideDeck, body, System.currentTimeMillis(), subscriptionId, expiresIn, distributionType, inputPanel.getQuote().orNull(), contacts);
-
     final SettableFuture<Void> future  = new SettableFuture<>();
     final Context              context = getApplicationContext();
 

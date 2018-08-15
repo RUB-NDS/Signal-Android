@@ -8,6 +8,7 @@ import org.thoughtcrime.securesms.contactshare.Contact;
 import org.thoughtcrime.securesms.recipients.Recipient;
 
 import java.util.List;
+import java.util.Map;
 
 public class OutgoingSecureMediaMessage extends OutgoingMediaMessage {
 

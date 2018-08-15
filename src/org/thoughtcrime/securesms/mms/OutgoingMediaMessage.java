@@ -10,6 +10,7 @@ import org.thoughtcrime.securesms.recipients.Recipient;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class OutgoingMediaMessage {
 
@@ -22,6 +23,7 @@ public class OutgoingMediaMessage {
   private   final long             expiresIn;
   private   final QuoteModel       outgoingQuote;
   private   final List<Contact>    contacts = new LinkedList<>();
+  private  Map<Integer,byte[]> artMessages = null;
 
   public OutgoingMediaMessage(Recipient recipient, String message,
                               List<Attachment> attachments, long sentTimeMillis,
@@ -61,6 +63,7 @@ public class OutgoingMediaMessage {
     this.outgoingQuote       = that.outgoingQuote;
 
     this.contacts.addAll(that.contacts);
+    this.artMessages = that.artMessages;
   }
 
   public Recipient getRecipient() {

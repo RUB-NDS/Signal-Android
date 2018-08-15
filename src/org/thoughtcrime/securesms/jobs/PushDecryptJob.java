@@ -3,12 +3,18 @@ package org.thoughtcrime.securesms.jobs;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.util.Log;
 import android.util.Pair;
+
+import com.facebook.research.asynchronousratchetingtree.art.message.SetupMessage;
+import com.facebook.research.asynchronousratchetingtree.art.message.UpdateMessage;
+import com.google.gson.Gson;
 
 import org.thoughtcrime.securesms.ApplicationContext;
 import org.thoughtcrime.securesms.ConversationListActivity;
@@ -36,7 +42,10 @@ import org.thoughtcrime.securesms.database.SmsDatabase;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
+import org.thoughtcrime.securesms.groups.BuildART;
 import org.thoughtcrime.securesms.groups.GroupMessageProcessor;
+import org.thoughtcrime.securesms.groups.UpdateART;
+import org.thoughtcrime.securesms.groups.WrappedARTMessage;
 import org.thoughtcrime.securesms.jobmanager.JobParameters;
 import org.thoughtcrime.securesms.mms.IncomingMediaMessage;
 import org.thoughtcrime.securesms.mms.MmsException;
@@ -100,6 +109,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class PushDecryptJob extends ContextJob {
+
+
 
   private static final long serialVersionUID = 2L;
 
@@ -549,6 +560,26 @@ public class PushDecryptJob extends ContextJob {
       handleExpirationUpdate(envelope, message, Optional.absent());
     }
 
+
+    // filter silent ART messages
+    String body = message.getBody().toString();
+    if (body.startsWith(GroupMessageProcessor.ART_CONFIG_IDENTIFIER)){
+
+      String wrappedSerialized = body.substring(GroupMessageProcessor.ART_CONFIG_IDENTIFIER.length());
+      Gson gson = new Gson();
+      WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
+      Log.d(TAG,"ART message received: "+wrappedARTMessage.getMessageClass());
+      if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getMessageClass())){
+        BuildART.processSetupMessage(wrappedARTMessage);
+      } else {
+        UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
+        UpdateART.processUpdateMessage(wrappedARTMessage, context);
+      }
+
+      return;
+    }
+
+
     Optional<InsertResult> insertResult = database.insertSecureDecryptedMessageInbox(mediaMessage, -1);
 
     if (insertResult.isPresent()) {
@@ -563,6 +594,8 @@ public class PushDecryptJob extends ContextJob {
       if (smsMessageId.isPresent()) {
         DatabaseFactory.getSmsDatabase(context).deleteMessage(smsMessageId.get());
       }
+
+
 
       MessageNotifier.updateNotification(context, insertResult.get().getThreadId());
     }

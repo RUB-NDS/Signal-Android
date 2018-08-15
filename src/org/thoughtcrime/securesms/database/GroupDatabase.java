@@ -15,6 +15,7 @@ import com.annimon.stream.Stream;
 import net.sqlcipher.database.SQLiteDatabase;
 
 import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
+import org.thoughtcrime.securesms.groups.SignalART;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.BitmapUtil;
 import org.thoughtcrime.securesms.util.GroupUtil;
@@ -27,6 +28,7 @@ import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -49,6 +51,7 @@ public class GroupDatabase extends Database {
   private static final String TIMESTAMP           = "timestamp";
   private static final String ACTIVE              = "active";
   private static final String MMS                 = "mms";
+
 
   public static final String CREATE_TABLE =
       "CREATE TABLE " + TABLE_NAME +
@@ -151,6 +154,7 @@ public class GroupDatabase extends Database {
 
     return recipients;
   }
+
 
   public void create(@NonNull String groupId, @Nullable String title, @NonNull List<Address> members,
                      @Nullable SignalServiceAttachmentPointer avatar, @Nullable String relay)
@@ -430,5 +434,7 @@ public class GroupDatabase extends Database {
     public boolean isMms() {
       return mms;
     }
+
   }
+
 }

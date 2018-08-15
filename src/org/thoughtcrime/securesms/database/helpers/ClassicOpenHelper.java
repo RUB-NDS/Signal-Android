@@ -29,6 +29,7 @@ import org.thoughtcrime.securesms.crypto.MasterSecretUtil;
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
 import org.thoughtcrime.securesms.database.DraftDatabase;
+import org.thoughtcrime.securesms.database.GroupARTDatabase;
 import org.thoughtcrime.securesms.database.GroupDatabase;
 import org.thoughtcrime.securesms.database.GroupReceiptDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase;
@@ -135,6 +136,7 @@ public class ClassicOpenHelper extends SQLiteOpenHelper {
     db.execSQL(GroupDatabase.CREATE_TABLE);
     db.execSQL(RecipientDatabase.CREATE_TABLE);
     db.execSQL(GroupReceiptDatabase.CREATE_TABLE);
+    db.execSQL(GroupARTDatabase.CREATE_TABLE);
 
     executeStatements(db, SmsDatabase.CREATE_INDEXS);
     executeStatements(db, MmsDatabase.CREATE_INDEXS);
@@ -143,6 +145,7 @@ public class ClassicOpenHelper extends SQLiteOpenHelper {
     executeStatements(db, DraftDatabase.CREATE_INDEXS);
     executeStatements(db, GroupDatabase.CREATE_INDEXS);
     executeStatements(db, GroupReceiptDatabase.CREATE_INDEXES);
+    executeStatements(db, GroupARTDatabase.CREATE_INDEXS);
   }
 
   public void onApplicationLevelUpgrade(Context context, MasterSecret masterSecret, int fromVersion,

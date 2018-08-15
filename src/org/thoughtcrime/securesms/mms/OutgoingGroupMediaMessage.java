@@ -13,6 +13,7 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.GroupC
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class OutgoingGroupMediaMessage extends OutgoingSecureMediaMessage {
 
@@ -31,6 +32,7 @@ public class OutgoingGroupMediaMessage extends OutgoingSecureMediaMessage {
           ThreadDatabase.DistributionTypes.CONVERSATION, expiresIn, quote, contacts);
 
     this.group = GroupContext.parseFrom(Base64.decode(encodedGroupContext));
+
   }
 
   public OutgoingGroupMediaMessage(@NonNull Recipient recipient,
@@ -39,7 +41,8 @@ public class OutgoingGroupMediaMessage extends OutgoingSecureMediaMessage {
                                    long sentTimeMillis,
                                    long expireIn,
                                    @Nullable QuoteModel quote,
-                                   @NonNull List<Contact> contacts)
+                                   @NonNull List<Contact> contacts
+                                   )
   {
     super(recipient, Base64.encodeBytes(group.toByteArray()),
           new LinkedList<Attachment>() {{if (avatar != null) add(avatar);}},

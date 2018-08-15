@@ -57,6 +57,7 @@ public class DatabaseFactory {
   private final SignedPreKeyDatabase  signedPreKeyDatabase;
   private final SessionDatabase       sessionDatabase;
   private final SearchDatabase        searchDatabase;
+  private final GroupARTDatabase      groupARTDatabase;
 
   public static DatabaseFactory getInstance(Context context) {
     synchronized (lock) {
@@ -139,6 +140,10 @@ public class DatabaseFactory {
     return getInstance(context).databaseHelper.getReadableDatabase();
   }
 
+  public static GroupARTDatabase getGroupARTDatabase (Context context){
+    return getInstance(context).groupARTDatabase;
+  }
+
   public static void upgradeRestored(Context context, SQLiteDatabase database){
     getInstance(context).databaseHelper.onUpgrade(database, database.getVersion(), -1);
     getInstance(context).databaseHelper.markCurrent(database);
@@ -168,6 +173,8 @@ public class DatabaseFactory {
     this.signedPreKeyDatabase = new SignedPreKeyDatabase(context, databaseHelper);
     this.sessionDatabase      = new SessionDatabase(context, databaseHelper);
     this.searchDatabase       = new SearchDatabase(context, databaseHelper);
+    this.groupARTDatabase     = new GroupARTDatabase(context, databaseHelper);
+
   }
 
   public void onApplicationLevelUpgrade(@NonNull Context context, @NonNull MasterSecret masterSecret,

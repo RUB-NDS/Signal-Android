@@ -73,7 +73,6 @@ public class GroupManager {
     final Set<Address>  memberAddresses = getMemberAddresses(members);
     final byte[]        avatarBytes     = BitmapUtil.toByteArray(avatar);
 
-    memberAddresses.add(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)));
     groupDatabase.updateMembers(groupId, new LinkedList<>(memberAddresses));
     groupDatabase.updateTitle(groupId, name);
     groupDatabase.updateAvatar(groupId, avatarBytes);
