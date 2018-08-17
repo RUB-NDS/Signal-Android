@@ -5,35 +5,21 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 
-import com.annimon.stream.Stream;
-import com.facebook.research.asynchronousratchetingtree.KeyServer;
 import com.facebook.research.asynchronousratchetingtree.art.ARTState;
-import com.facebook.research.asynchronousratchetingtree.art.message.SetupMessage;
-import com.google.gson.Gson;
 
 import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
-import org.thoughtcrime.securesms.groups.SignalART;
-import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.util.GroupUtil;
-import org.thoughtcrime.securesms.util.Util;
+import org.whispersystems.libsignal.util.guava.Function;
 import org.whispersystems.libsignal.util.guava.Optional;
-import org.whispersystems.signalservice.api.messages.SignalServiceAttachmentPointer;
+import org.whispersystems.libsignal.util.guava.Supplier;
 
-import java.sql.Blob;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.Set;
 
 public class GroupARTDatabase extends Database {
     static final String TABLE_NAME          = "group_arts";
     private static final String ID                  = "_id";
     static final String GROUP_ID            = "group_id";
-    private static final String MEMBER_ID               = "member_id";
     private static final String ART_STATE              = "art_state";
-    private static String ART_MESSAGE_SER        = "art_message_ser";
-    private static String LEAF_NUM               = "leaf_num";
 
 
 
@@ -48,15 +34,12 @@ public class GroupARTDatabase extends Database {
             "CREATE TABLE " + TABLE_NAME +
                     " (" + ID + " INTEGER PRIMARY KEY, " +
                     GROUP_ID + " TEXT, " +
-                    MEMBER_ID + " TEXT, " +
-
                     ART_STATE + " BLOB " +
-                    ART_MESSAGE_SER +"BLOB"+
-                    LEAF_NUM +"INTEGER"+
+
                    ");";
 
-    public static final String[] CREATE_INDEXS = {
-            "CREATE UNIQUE INDEX IF NOT EXISTS grp_member_id_index ON " + TABLE_NAME + " (" + GROUP_ID + ","+ MEMBER_ID+");",
+    public static final String[] CREATE_INDEXES = {
+            "CREATE UNIQUE INDEX IF NOT EXISTS grp_member_id_index ON " + TABLE_NAME + " (" + GROUP_ID + ");",
     };
 
 
@@ -75,35 +58,29 @@ public class GroupARTDatabase extends Database {
 
 
     public void create(@NonNull String groupId,
-                       @NonNull Address member,
-                       @Nullable ARTState state,
-                       @Nullable byte[] message,
-                       @Nullable int leafNum)
+                       @NonNull ARTState state
+                      )
     {
         ContentValues contentValues = new ContentValues();
         contentValues.put(GROUP_ID, groupId);
-        contentValues.put(MEMBER_ID, String.valueOf(member));
         byte[] serizalizedART = ARTStateSerializer.getInstance().toByteArray(state);
         contentValues.put(ART_STATE, serizalizedART);
-        contentValues.put(ART_MESSAGE_SER, message);
-        contentValues.put(LEAF_NUM, leafNum);
 
         databaseHelper.getWritableDatabase().insert(TABLE_NAME, null, contentValues);
     }
 
-    public void update(String groupId, Address member, ARTState state) {
+    public void update(String groupId, ARTState state) {
 
         ContentValues contentValues = new ContentValues();
 
-        contentValues.put(MEMBER_ID, String.valueOf(member));
         byte[] serializedART = ARTStateSerializer.getInstance().toByteArray(state);
 
         contentValues.put(ART_STATE, serializedART);
 
 
         databaseHelper.getWritableDatabase().update(TABLE_NAME, contentValues,
-                GROUP_ID + " = ? AND "+ MEMBER_ID + " = ?",
-                new String[] {groupId, String.valueOf(member)});
+                GROUP_ID + " = ?",
+                new String[] {groupId});
 
 
         notifyConversationListListeners();
@@ -117,66 +94,25 @@ public class GroupARTDatabase extends Database {
         databaseHelper.getWritableDatabase().delete(TABLE_NAME,GROUP_ID + " = ?", new String[]{groupId} );
     }
 
-    public ARTState getARTStateByLeafNum (String groupId, String leafNum){
+    public Optional<ARTState>  getARTState(String groupId) {
         Cursor cursor = null;
 
+
         try {
-            cursor = databaseHelper.getReadableDatabase().query(TABLE_NAME, new String[] {GROUP_ID, MEMBER_ID, ART_STATE},
-                    GROUP_ID + " = ? AND "+LEAF_NUM+"=?",
-                    new String[] {groupId, leafNum},
+            cursor = databaseHelper.getReadableDatabase().query(TABLE_NAME, new String[] {GROUP_ID, ART_STATE},
+                    GROUP_ID + " = ?",
+                    new String[] {groupId },
                     null, null, null);
 
             if (cursor != null && cursor.moveToFirst()) {
                 byte[] serializedArt = cursor.getBlob(cursor.getColumnIndexOrThrow(ART_STATE));
-                return ARTStateSerializer.getInstance().fromByteArray(serializedArt);
+                return Optional.fromNullable(ARTStateSerializer.getInstance().fromByteArray(serializedArt));
             }
 
-            return null;
+            return Optional.absent();
         } finally {
             if (cursor != null)
                 cursor.close();
         }
     }
-
-
-
-    public ARTState getARTState(String groupId, String memberId) {
-        Cursor cursor = null;
-
-        try {
-            cursor = databaseHelper.getReadableDatabase().query(TABLE_NAME, new String[] {GROUP_ID, MEMBER_ID, ART_STATE},
-                    GROUP_ID + " = ? AND "+MEMBER_ID+"=?",
-                    new String[] {groupId, memberId},
-                    null, null, null);
-
-            if (cursor != null && cursor.moveToFirst()) {
-                byte[] serializedArt = cursor.getBlob(cursor.getColumnIndexOrThrow(ART_STATE));
-                return ARTStateSerializer.getInstance().fromByteArray(serializedArt);
-            }
-
-            return null;
-        } finally {
-            if (cursor != null)
-                cursor.close();
-        }
-    }
-
-        public void update(String groupId, ARTState state, int leafNum) {
-
-            ContentValues contentValues = new ContentValues();
-
-            contentValues.put(LEAF_NUM, String.valueOf(leafNum));
-            byte[] serializedART = ARTStateSerializer.getInstance().toByteArray(state);
-
-            contentValues.put(ART_STATE, serializedART);
-
-
-            databaseHelper.getWritableDatabase().update(TABLE_NAME, contentValues,
-                    GROUP_ID + " = ? AND "+ LEAF_NUM + " = ?",
-                    new String[] {groupId, String.valueOf(leafNum)});
-
-
-            notifyConversationListListeners();
-        }
-
 }

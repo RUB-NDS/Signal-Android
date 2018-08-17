@@ -41,58 +41,27 @@ public class UpdateART {
 
     }
 
-    public static void processUpdateMessage(WrappedARTMessage wrappedMsg, Context context) {
 
-        GroupARTDatabase groupARTDatabase = DatabaseFactory.getGroupARTDatabase(context);
-        AuthenticatedMessage authenticatedMessage = new AuthenticatedMessage(wrappedMsg.getSerializedMessage());
-        UpdateMessage updateMessage = new UpdateMessage(authenticatedMessage.getMessage());
-        String groupID = wrappedMsg.getGroupId();
-
-        ARTState state = groupARTDatabase.getARTStateByLeafNum(groupID, String.valueOf(updateMessage.getLeafNum()));
-
-        byte[] mac = Crypto.hmacSha256(authenticatedMessage.getMessage(), state.getStageKey());
-        if (!Arrays.equals(mac, authenticatedMessage.getAuthenticator())) {
-            Utils.except("MAC is incorrect for update message.");
-        }
-        Node tree = state.getTree();
-        tree = updateTreeWithPublicPath(tree, updateMessage.getLeafNum(), updateMessage.getPath(), 0);
-        state.setTree((SecretNode) tree);
-        deriveStageKey(state);
-
-        groupARTDatabase.update(groupID, state, state.getPeerNum());
-    }
-
-
-
-    public static AuthenticatedMessage update(String groupID, Context context){
-        AuthenticatedMessage authenticatedMessage = null;
-
-        GroupARTDatabase groupARTDatabase = DatabaseFactory.getGroupARTDatabase(context);
-
-        Address ownAddress = Address.fromSerialized(TextSecurePreferences.getLocalNumber(context));
-        ARTState artState = groupARTDatabase.getARTState(groupID, String.valueOf(ownAddress));
-
-        // Alternative fuer umd neuen state etc. zu haben authenticatedMessage = updateKey(artState);
-
-        SecretLeafNode newNode = new SecretLeafNode(DHKeyPair.generate(true));
-        SecretNode newTree = updateTreeWithSecretLeaf(artState.getTree(), artState.getPeerNum(), newNode);
-        artState.setTree(newTree);
-        UpdateMessage m = new UpdateMessage(
-                artState.getPeerNum(),
-                pathNodeKeys(artState.getTree(), artState.getPeerNum())
+    /**
+     * Called to update
+     * @param state
+     * @return
+     */
+    public AuthenticatedMessage updateMyKey(ARTState state) {
+        SecretLeafNode newNode = new SecretLeafNode(DHKeyPair.generate(false)); // generate new key pair
+        SecretNode newTree = updateTreeWithSecretLeaf(state.getTree(), state.getPeerNum(), newNode); //update local tree with secret leaf
+        state.setTree(newTree); //set tree in state
+        UpdateMessage m = new UpdateMessage( //generate new updateMessage
+                state.getPeerNum(),
+                pathNodeKeys(state.getTree(), state.getPeerNum())
         );
         byte[] serialisedUpdateMessage = m.serialise();
-        byte[] mac = Crypto.hmacSha256(serialisedUpdateMessage, artState.getStageKey());
-        deriveStageKey(artState);
-
-
-        groupARTDatabase.update(groupID, ownAddress, artState);
-
-        return authenticatedMessage = new AuthenticatedMessage(serialisedUpdateMessage, mac);
+        byte[] mac = Crypto.hmacSha256(serialisedUpdateMessage, state.getStageKey());
+        deriveStageKey(state);
+        return new AuthenticatedMessage(serialisedUpdateMessage, mac);
     }
 
-
-    private static void deriveStageKey(ARTState state) {
+    private void deriveStageKey(ARTState state) {
         state.setStageKey(
                 Crypto.artKDF(
                         state.getStageKey(),
@@ -147,7 +116,7 @@ public class UpdateART {
         return keys.toArray(new DHPubKey[] {});
     }
 
-    private static Node updateTreeWithPublicPath(Node tree, int i, DHPubKey[] newPath, int pathIndex) {
+    private Node updateTreeWithPublicPath(Node tree, int i, DHPubKey[] newPath, int pathIndex) {
         int l = leftTreeSize(tree.numLeaves());
         if (newPath.length - 1 == pathIndex) {
             return new PublicLeafNode(newPath[pathIndex]);
@@ -183,5 +152,13 @@ public class UpdateART {
         }
 
         return result;
+    }
+
+    public void updateStateFromMessage(ARTState state, UpdateMessage updateMessage) {
+        Node tree = state.getTree();
+
+        tree = updateTreeWithPublicPath(tree, updateMessage.getLeafNum(), updateMessage.getPath(), 0);
+        state.setTree((SecretNode) tree);
+        deriveStageKey(state);
     }
 }

@@ -145,7 +145,7 @@ public class ClassicOpenHelper extends SQLiteOpenHelper {
     executeStatements(db, DraftDatabase.CREATE_INDEXS);
     executeStatements(db, GroupDatabase.CREATE_INDEXS);
     executeStatements(db, GroupReceiptDatabase.CREATE_INDEXES);
-    executeStatements(db, GroupARTDatabase.CREATE_INDEXS);
+    executeStatements(db, GroupARTDatabase.CREATE_INDEXES);
   }
 
   public void onApplicationLevelUpgrade(Context context, MasterSecret masterSecret, int fromVersion,

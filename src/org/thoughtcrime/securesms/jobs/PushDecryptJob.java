@@ -3,10 +3,8 @@ package org.thoughtcrime.securesms.jobs;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Build;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.util.Log;
@@ -15,6 +13,7 @@ import android.util.Pair;
 import com.facebook.research.asynchronousratchetingtree.art.message.SetupMessage;
 import com.facebook.research.asynchronousratchetingtree.art.message.UpdateMessage;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 import org.thoughtcrime.securesms.ApplicationContext;
 import org.thoughtcrime.securesms.ConversationListActivity;
@@ -42,10 +41,13 @@ import org.thoughtcrime.securesms.database.SmsDatabase;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
+import org.thoughtcrime.securesms.groups.ARTGroupManager;
 import org.thoughtcrime.securesms.groups.BuildART;
 import org.thoughtcrime.securesms.groups.GroupMessageProcessor;
 import org.thoughtcrime.securesms.groups.UpdateART;
-import org.thoughtcrime.securesms.groups.WrappedARTMessage;
+import org.thoughtcrime.securesms.groups.protocol.JsonARTMessage;
+import org.thoughtcrime.securesms.groups.protocol.JsonMessageDeserializer;
+import org.thoughtcrime.securesms.groups.protocol.WrappedARTMessage;
 import org.thoughtcrime.securesms.jobmanager.JobParameters;
 import org.thoughtcrime.securesms.mms.IncomingMediaMessage;
 import org.thoughtcrime.securesms.mms.MmsException;
@@ -563,17 +565,23 @@ public class PushDecryptJob extends ContextJob {
 
     // filter silent ART messages
     String body = message.getBody().toString();
-    if (body.startsWith(GroupMessageProcessor.ART_CONFIG_IDENTIFIER)){
+    if (body.startsWith(ARTGroupManager.ART_CONFIG_IDENTIFIER)){
 
-      String wrappedSerialized = body.substring(GroupMessageProcessor.ART_CONFIG_IDENTIFIER.length());
-      Gson gson = new Gson();
+      String wrappedSerialized = body.substring(ARTGroupManager.ART_CONFIG_IDENTIFIER.length());
+      Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
+
+
+
       WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
-      Log.d(TAG,"ART message received: "+wrappedARTMessage.getMessageClass());
-      if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getMessageClass())){
+      Log.d(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
+
+      ARTGroupManager mgr = ARTGroupManager.getInstance(null);
+
+      if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())){
         BuildART.processSetupMessage(wrappedARTMessage);
       } else {
         UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
-        UpdateART.processUpdateMessage(wrappedARTMessage, context);
+        mgr.processUpdateMessage(wrappedARTMessage);
       }
 
       return;

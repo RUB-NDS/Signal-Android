@@ -7,17 +7,9 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
-import com.facebook.research.asynchronousratchetingtree.art.ARTState;
-import com.facebook.research.asynchronousratchetingtree.art.message.AuthenticatedMessage;
-import com.facebook.research.asynchronousratchetingtree.art.message.SetupMessage;
-import com.facebook.research.asynchronousratchetingtree.art.message.UpdateMessage;
-import com.facebook.research.asynchronousratchetingtree.crypto.Crypto;
-import com.google.gson.Gson;
 import com.google.protobuf.ByteString;
 
 import org.thoughtcrime.securesms.ApplicationContext;
-import org.thoughtcrime.securesms.attachments.Attachment;
-import org.thoughtcrime.securesms.database.ARTStateSerializer;
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupARTDatabase;
@@ -56,7 +48,8 @@ import static org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
 public class GroupMessageProcessor {
 
-  public final static  String ART_CONFIG_IDENTIFIER = "<ART_CONFIG_MESSAGE>";
+  private static final String LOG_TAG=GroupMessageProcessor.class.getSimpleName();
+
 
 
   private static final String TAG = GroupMessageProcessor.class.getSimpleName();
@@ -95,25 +88,26 @@ public class GroupMessageProcessor {
                                                   @NonNull SignalServiceGroup group,
                                                   boolean outgoing)
   {
+
+    Log.d(TAG,"handleGroupCreate");
+
     GroupDatabase        database = DatabaseFactory.getGroupDatabase(context);
     String               id       = GroupUtil.getEncodedId(group.getGroupId(), false);
     GroupContext.Builder builder  = createGroupContext(group);
     builder.setType(GroupContext.Type.UPDATE); //Wichtig: Setze Typ auf Update
 
-    BuildART buildART = new BuildART();
-    buildART.setupART(context, group);
+
 
     SignalServiceAttachment avatar  = group.getAvatar().orNull();
     List<Address>           members = group.getMembers().isPresent() ? new LinkedList<Address>() : null;
 
-    int memberCount = 0;
     if (group.getMembers().isPresent()) { //Wichtig: Erzeuge Liste der Mitglieder
       for (String member : group.getMembers().get()) {
         members.add(Address.fromExternal(context, member));
-        memberCount +=1;
       }
     }
-//erzeuge Datenbankeintrag
+
+    //erzeuge Datenbankeintrag
     database.create(id, group.getName().orNull(), members,
                     avatar != null && avatar.isPointer() ? avatar.asPointer() : null,
                     envelope.getRelay());
@@ -127,6 +121,8 @@ public class GroupMessageProcessor {
                                                   @NonNull GroupRecord groupRecord,
                                                   boolean outgoing)
   {
+
+    Log.d(TAG,"handleGroupUpdate");
 
     GroupDatabase database = DatabaseFactory.getGroupDatabase(context);
     String        id       = GroupUtil.getEncodedId(group.getGroupId(), false);
@@ -149,8 +145,13 @@ public class GroupMessageProcessor {
 
     GroupARTDatabase groupARTDatabase = DatabaseFactory.getGroupARTDatabase(context);
     Address ownAddress = Address.fromSerialized(TextSecurePreferences.getLocalNumber(context));
-    byte[] stageKey =  groupARTDatabase.getARTState(String.valueOf(group), String.valueOf(ownAddress)).getStageKey();
+
+    /* Optional<ARTState> optArtState =  groupARTDatabase.getARTState(String.valueOf(group));
+
+    byte[] stageKey = optArtState.get().getStageKey();
     byte[] cryptoMessage = Crypto.encrypt(id.getBytes(), stageKey);
+
+    */
 
     if (addedMembers.size() > 0) {//Wichtig: Fuege neue Mitgleider hinzu
       Set<Address> unionMembers = new HashSet<>(recordMembers);
@@ -159,21 +160,11 @@ public class GroupMessageProcessor {
 
       builder.clearMembers();
 
-      BuildART buildART = new BuildART();
-      buildART.setupART(context, group);
-
       for (Address addedMember : addedMembers) {
         builder.addMembers(addedMember.serialize());
-        sendARTState(groupARTDatabase, id, addedMember, context, envelope, false);
       }
     } else {
       builder.clearMembers();
-
-      if (outgoing){
-        for (Address recipient: addedMembers){
-            sendARTState(groupARTDatabase, id, recipient, context, envelope,true);
-        }
-      }
     }
 
     if (missingMembers.size() > 0) {
@@ -301,45 +292,5 @@ public class GroupMessageProcessor {
     return builder;
   }
 
-  private static void sendARTState(GroupARTDatabase groupARTDatabase, String id, Address member, Context context, SignalServiceEnvelope envelope, boolean isUpdate){
-    //Sende Nachricht an jedes Gruppenmitglied mit neuem State bzw. update oder setupMessage
-    ARTState artState = groupARTDatabase.getARTState(id, String.valueOf(member));
-    byte[] serializedArtState = ARTStateSerializer.getInstance().toByteArray(artState);
 
-    WrappedARTMessage wrappedMsg = new WrappedARTMessage();
-
-    Gson gson = new Gson();
-    if (isUpdate) {
-      AuthenticatedMessage authenticatedMessage = UpdateART.update(id, context);
-
-      byte[] updateMessage = authenticatedMessage.serialise();
-      wrappedMsg.setSerializedMessage(updateMessage);
-      wrappedMsg.setMessageClass(UpdateMessage.class.getSimpleName());
-      wrappedMsg.setGroupId(id);
-    } else {
-      byte[] setupMessage = artState.getSetupMessage();
-      wrappedMsg.setSerializedMessage(setupMessage);
-      wrappedMsg.setMessageClass(SetupMessage.class.getSimpleName());
-      wrappedMsg.setArtState(artState);
-      wrappedMsg.setGroupId(id);
-      wrappedMsg.setLeafNum(artState.getPeerNum());
-    }
-    String wrappedSerialized = gson.toJson(wrappedMsg);
-
-    String artMessage = ART_CONFIG_IDENTIFIER + wrappedSerialized;
-
-
-    OutgoingSecureMediaMessage outgoingSecureMediaMessage = new OutgoingSecureMediaMessage(Recipient.from(context, member, false ),artMessage, null,  envelope.getTimestamp(), -1, 1000 , null, Collections.emptyList());
-    MmsDatabase               mmsDatabase     = DatabaseFactory.getMmsDatabase(context);
-
-    long                      threadId        = DatabaseFactory.getThreadDatabase(context).getThreadIdFor(Recipient.from(context, member, false ));
-    long                      messageId       = 0;
-    try {
-      messageId = mmsDatabase.insertMessageOutbox(outgoingSecureMediaMessage, threadId, false, null);
-    } catch (MmsException e) {
-      e.printStackTrace();
-    }
-
-    mmsDatabase.markAsSent(messageId, true); //markiere Nachricht als gesendet
-  }
 }

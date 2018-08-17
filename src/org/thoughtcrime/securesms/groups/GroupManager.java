@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.util.Log;
 
 import com.google.protobuf.ByteString;
 
@@ -36,6 +37,8 @@ import java.util.Set;
 
 public class GroupManager {
 
+    private static final String LOG_TAG = GroupManager.class.getSimpleName();
+
   public static @NonNull GroupActionResult createGroup(@NonNull  Context        context,
                                                        @NonNull  Set<Recipient> members,
                                                        @Nullable Bitmap         avatar,
@@ -50,6 +53,14 @@ public class GroupManager {
 
     memberAddresses.add(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)));
     groupDatabase.create(groupId, name, new LinkedList<>(memberAddresses), null, null);
+
+    Log.d(LOG_TAG,"create Group");
+
+    BuildART buildART = new BuildART();
+    buildART.setupART(context, groupId, memberAddresses);
+
+    ARTGroupManager artMgr = ARTGroupManager.getInstance(context);
+    artMgr.sendARTStates(groupId,memberAddresses,false);
 
 
     if (!mms) {
@@ -102,6 +113,10 @@ public class GroupManager {
       for (Address member : members) {
         numbers.add(member.serialize());
       }
+
+      ARTGroupManager artMgr = ARTGroupManager.getInstance(context);
+
+      artMgr.updateKey(groupId);
 
       GroupContext.Builder groupContextBuilder = GroupContext.newBuilder()
                                                              .setId(ByteString.copyFrom(GroupUtil.getDecodedId(groupId)))
