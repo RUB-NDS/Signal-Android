@@ -7,6 +7,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
+import com.facebook.research.asynchronousratchetingtree.art.ARTState;
 import com.google.protobuf.ByteString;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
@@ -51,16 +52,16 @@ public class GroupManager {
     final Recipient     groupRecipient  = Recipient.from(context, Address.fromSerialized(groupId), false);
     final Set<Address>  memberAddresses = getMemberAddresses(members);
 
+    Log.d(LOG_TAG,"create Group");
+
+    ARTGroupManager artMgr = ARTGroupManager.getInstance(context);
+
+    SetupResult setupResult = artMgr.setupART(groupId,memberAddresses);
+
     memberAddresses.add(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)));
     groupDatabase.create(groupId, name, new LinkedList<>(memberAddresses), null, null);
 
-    Log.d(LOG_TAG,"create Group");
-
-    BuildART buildART = new BuildART();
-    buildART.setupART(context, groupId, memberAddresses);
-
-    ARTGroupManager artMgr = ARTGroupManager.getInstance(context);
-    artMgr.sendARTStates(groupId,memberAddresses,false);
+    artMgr.sendSetupMessages(groupId, setupResult);
 
 
     if (!mms) {

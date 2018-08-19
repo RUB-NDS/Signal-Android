@@ -29,6 +29,7 @@ import android.text.style.StyleSpan;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.MmsSmsColumns;
 import org.thoughtcrime.securesms.database.SmsDatabase;
+import org.thoughtcrime.securesms.groups.ARTGroupManager;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.ExpirationUtil;
 
@@ -111,7 +112,8 @@ public class ThreadRecord extends DisplayRecord {
       if (TextUtils.isEmpty(getBody())) {
         return new SpannableString(emphasisAdded(context.getString(R.string.ThreadRecord_media_message)));
       } else {
-        return new SpannableString(getBody());
+        ARTGroupManager mgr = ARTGroupManager.getInstance(context);
+        return new SpannableString(mgr.filterBody(getBody()));
       }
     }
   }

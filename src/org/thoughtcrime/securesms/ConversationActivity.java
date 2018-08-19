@@ -120,6 +120,8 @@ import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
 import org.thoughtcrime.securesms.events.ReminderUpdateEvent;
 import org.thoughtcrime.securesms.giph.ui.GiphyActivity;
+import org.thoughtcrime.securesms.groups.ARTGroupManager;
+import org.thoughtcrime.securesms.groups.protocol.WrappedConversationMessage;
 import org.thoughtcrime.securesms.jobs.MultiDeviceBlockedUpdateJob;
 import org.thoughtcrime.securesms.jobs.RetrieveProfileJob;
 import org.thoughtcrime.securesms.jobs.ServiceOutageDetectionJob;
@@ -1700,7 +1702,25 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       throws InvalidMessageException
   {
     Log.w(TAG, "Sending media message...");
-    sendMediaMessage(forceSms, getMessage(), attachmentManager.buildSlideDeck(), Collections.emptyList(), expiresIn, subscriptionId, initiating);
+
+    final Context context     = getApplicationContext();
+
+    String messageBody = null;
+
+    if (recipient.getAddress().isGroup()) {
+      WrappedConversationMessage msg = new WrappedConversationMessage();
+      msg.setOriginalBody(getMessage());
+
+      String groupId = recipient.getAddress().toString();
+      ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
+      msg.setSignature(grpMgr.signGroupId(groupId));
+
+      messageBody = grpMgr.serializeWrappedMessage(msg);
+    } else {
+      messageBody = getMessage();
+    }
+
+    sendMediaMessage(forceSms, messageBody, attachmentManager.buildSlideDeck(), Collections.emptyList(), expiresIn, subscriptionId, initiating);
   }
 
   private ListenableFuture<Void> sendMediaMessage(final boolean forceSms, String body, SlideDeck slideDeck, List<Contact> contacts, final long expiresIn, final int subscriptionId, final boolean initiating) {
@@ -1715,6 +1735,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     } else {
       outgoingMessage = outgoingMessageCandidate;
     }
+
+    Log.d(TAG,"send media message");
 
     Permissions.with(this)
                .request(Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS)
@@ -1753,7 +1775,13 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       throws InvalidMessageException
   {
     final Context context     = getApplicationContext();
-    final String  messageBody = getMessage();
+
+    WrappedConversationMessage msg = new WrappedConversationMessage();
+    msg.setOriginalBody(getMessage());
+
+    ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
+
+    final String  messageBody = grpMgr.serializeWrappedMessage(msg);
 
     OutgoingTextMessage message;
 

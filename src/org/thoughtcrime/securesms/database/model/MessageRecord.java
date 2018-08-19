@@ -27,6 +27,7 @@ import org.thoughtcrime.securesms.database.MmsSmsColumns;
 import org.thoughtcrime.securesms.database.SmsDatabase;
 import org.thoughtcrime.securesms.database.documents.IdentityKeyMismatch;
 import org.thoughtcrime.securesms.database.documents.NetworkFailure;
+import org.thoughtcrime.securesms.groups.ARTGroupManager;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.ExpirationUtil;
 import org.thoughtcrime.securesms.util.GroupUtil;
@@ -116,11 +117,18 @@ public abstract class MessageRecord extends DisplayRecord {
     } else if (isIdentityDefault()) {
       if (isOutgoing()) return new SpannableString(context.getString(R.string.MessageRecord_you_marked_your_safety_number_with_s_unverified, getIndividualRecipient().toShortString()));
       else              return new SpannableString(context.getString(R.string.MessageRecord_you_marked_your_safety_number_with_s_unverified_from_another_device, getIndividualRecipient().toShortString()));
-    } else if (getBody().length() > MAX_DISPLAY_LENGTH) {
-      return new SpannableString(getBody().substring(0, MAX_DISPLAY_LENGTH));
-    }
+    } else {
 
-    return new SpannableString(getBody());
+      ARTGroupManager mgr = ARTGroupManager.getInstance(context);
+
+      String filteredBody = mgr.filterBody(getBody());
+
+      if (filteredBody.length() > MAX_DISPLAY_LENGTH) {
+        return new SpannableString(filteredBody.substring(0, MAX_DISPLAY_LENGTH));
+      } else {
+        return new SpannableString(filteredBody);
+      }
+    }
   }
 
   public long getId() {

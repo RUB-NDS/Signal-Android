@@ -78,8 +78,10 @@ import org.whispersystems.libsignal.InvalidMessageException;
 import org.whispersystems.libsignal.InvalidVersionException;
 import org.whispersystems.libsignal.LegacyMessageException;
 import org.whispersystems.libsignal.NoSessionException;
+import org.whispersystems.libsignal.SignalProtocolAddress;
 import org.whispersystems.libsignal.UntrustedIdentityException;
 import org.whispersystems.libsignal.protocol.PreKeySignalMessage;
+import org.whispersystems.libsignal.state.SessionRecord;
 import org.whispersystems.libsignal.state.SessionStore;
 import org.whispersystems.libsignal.state.SignalProtocolStore;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -104,6 +106,7 @@ import org.whispersystems.signalservice.api.messages.shared.SharedContact;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 
 import java.security.MessageDigest;
+import java.security.interfaces.ECPublicKey;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -567,6 +570,9 @@ public class PushDecryptJob extends ContextJob {
     String body = message.getBody().toString();
     if (body.startsWith(ARTGroupManager.ART_CONFIG_IDENTIFIER)){
 
+      envelope.getSourceAddress();
+
+
       String wrappedSerialized = body.substring(ARTGroupManager.ART_CONFIG_IDENTIFIER.length());
       Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
 
@@ -578,7 +584,7 @@ public class PushDecryptJob extends ContextJob {
       ARTGroupManager mgr = ARTGroupManager.getInstance(null);
 
       if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())){
-        BuildART.processSetupMessage(wrappedARTMessage);
+        mgr.processSetupMessage(wrappedARTMessage);
       } else {
         UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
         mgr.processUpdateMessage(wrappedARTMessage);
@@ -697,6 +703,16 @@ public class PushDecryptJob extends ContextJob {
                                                                 message.getExpiresInSeconds() * 1000L);
 
       textMessage = new IncomingEncryptedMessage(textMessage, body);
+
+      ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
+
+      grpMgr.checkMessage(textMessage);
+
+      SessionStore sessionStore = new TextSecureSessionStore(context);
+      Log.d(TAG,"Envelope source: "+envelope.getSource());
+
+
+
       Optional<InsertResult> insertResult = database.insertMessageInbox(textMessage);
 
       if (insertResult.isPresent()) threadId = insertResult.get().getThreadId();

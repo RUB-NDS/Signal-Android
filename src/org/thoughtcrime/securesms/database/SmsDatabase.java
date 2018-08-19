@@ -36,6 +36,7 @@ import org.thoughtcrime.securesms.database.documents.IdentityKeyMismatchList;
 import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.SmsMessageRecord;
+import org.thoughtcrime.securesms.groups.ARTGroupManager;
 import org.thoughtcrime.securesms.jobmanager.JobManager;
 import org.thoughtcrime.securesms.jobs.TrimThreadJob;
 import org.thoughtcrime.securesms.recipients.Recipient;
@@ -565,7 +566,9 @@ public class SmsDatabase extends MessagingDatabase {
 
     values.put(REPLY_PATH_PRESENT, message.isReplyPathPresent());
     values.put(SERVICE_CENTER, message.getServiceCenterAddress());
+
     values.put(BODY, message.getMessageBody());
+
     values.put(TYPE, type);
     values.put(THREAD_ID, threadId);
 
