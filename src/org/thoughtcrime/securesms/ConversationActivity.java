@@ -1775,13 +1775,15 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       throws InvalidMessageException
   {
     final Context context     = getApplicationContext();
+    final String  messageBody = getMessage();
 
-    WrappedConversationMessage msg = new WrappedConversationMessage();
+
+    /*WrappedConversationMessage msg = new WrappedConversationMessage();
     msg.setOriginalBody(getMessage());
 
     ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
 
-    final String  messageBody = grpMgr.serializeWrappedMessage(msg);
+    final String  messageBody = grpMgr.serializeWrappedMessage(msg);*/
 
     OutgoingTextMessage message;
 
@@ -1790,6 +1792,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     } else {
       message = new OutgoingTextMessage(recipient, messageBody, expiresIn, subscriptionId);
     }
+
 
     Permissions.with(this)
                .request(Manifest.permission.SEND_SMS)

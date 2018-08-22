@@ -89,7 +89,12 @@ public class GroupManager {
     groupDatabase.updateTitle(groupId, name);
     groupDatabase.updateAvatar(groupId, avatarBytes);
 
-    if (!GroupUtil.isMmsGroup(groupId)) {
+      ARTGroupManager artMgr = ARTGroupManager.getInstance(context);
+
+      artMgr.updateKey(groupId);
+
+
+      if (!GroupUtil.isMmsGroup(groupId)) {
       return sendGroupUpdate(context, groupId, memberAddresses, name, avatarBytes);
     } else {
       Recipient groupRecipient = Recipient.from(context, Address.fromSerialized(groupId), true);
@@ -114,10 +119,6 @@ public class GroupManager {
       for (Address member : members) {
         numbers.add(member.serialize());
       }
-
-      ARTGroupManager artMgr = ARTGroupManager.getInstance(context);
-
-      artMgr.updateKey(groupId);
 
       GroupContext.Builder groupContextBuilder = GroupContext.newBuilder()
                                                              .setId(ByteString.copyFrom(GroupUtil.getDecodedId(groupId)))

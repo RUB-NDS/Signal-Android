@@ -1,5 +1,7 @@
 package org.thoughtcrime.securesms.groups.protocol;
 
+import org.whispersystems.libsignal.util.guava.Optional;
+
 public abstract class JsonARTMessage {
     private String jsonMessageClass;
     private String originalBody;

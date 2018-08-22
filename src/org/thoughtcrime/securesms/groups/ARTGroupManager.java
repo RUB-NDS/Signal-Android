@@ -1,7 +1,6 @@
 package org.thoughtcrime.securesms.groups;
 
 import android.content.Context;
-import android.provider.ContactsContract;
 import android.support.annotation.NonNull;
 import android.util.Log;
 
@@ -18,8 +17,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil;
-import org.thoughtcrime.securesms.crypto.KeyStoreHelper;
-import org.thoughtcrime.securesms.crypto.PreKeyUtil;
 import org.thoughtcrime.securesms.database.ARTStateSerializer;
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
@@ -27,13 +24,11 @@ import org.thoughtcrime.securesms.database.GroupARTDatabase;
 import org.thoughtcrime.securesms.database.GroupDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase;
 import org.thoughtcrime.securesms.database.MmsDatabase;
-import org.thoughtcrime.securesms.database.OneTimePreKeyDatabase;
 import org.thoughtcrime.securesms.database.SessionDatabase;
 import org.thoughtcrime.securesms.groups.protocol.JsonARTMessage;
 import org.thoughtcrime.securesms.groups.protocol.JsonMessageDeserializer;
 import org.thoughtcrime.securesms.groups.protocol.WrappedARTMessage;
 import org.thoughtcrime.securesms.groups.protocol.WrappedConversationMessage;
-import org.thoughtcrime.securesms.mms.OutgoingSecureMediaMessage;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.sms.IncomingTextMessage;
 import org.thoughtcrime.securesms.sms.MessageSender;
@@ -45,28 +40,22 @@ import org.whispersystems.libsignal.IdentityKeyPair;
 import org.whispersystems.libsignal.ecc.ECKeyPair;
 import org.whispersystems.libsignal.ecc.ECPrivateKey;
 import org.whispersystems.libsignal.ecc.ECPublicKey;
-import org.whispersystems.libsignal.state.PreKeyRecord;
-import org.whispersystems.libsignal.state.PreKeyStore;
 import org.whispersystems.libsignal.state.SessionRecord;
 import org.whispersystems.libsignal.util.guava.Optional;
 
-import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-
-import javax.crypto.Cipher;
 
 public class ARTGroupManager {
     private static final String LOG_TAG = ARTGroupManager.class.getSimpleName();
 
     public final static  String ART_CONFIG_IDENTIFIER = "<ART_CONFIG_MESSAGE>";
+    public final static String ART_MESSAGE_IDENTIFIER = "<ART_MESSAGE>";
     private final UpdateART updateArt;
 
     private Context ctx;
@@ -142,21 +131,48 @@ public class ARTGroupManager {
     public void sendSetupMessages(String groupId, SetupResult setupResult){
 
         for (ARTGroupMember member :setupResult.getMembers()) {
-            WrappedARTMessage wrappedMsg = new WrappedARTMessage();
-            wrappedMsg.setGroupId(groupId);
-            wrappedMsg.setArtMessageClass(SetupMessage.class.getSimpleName());
-            wrappedMsg.setSerializedMessage(setupResult.getArtState().getSetupMessage());
+            if (member.equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(ctx)))){
+                Log.w(LOG_TAG,"do not send setup message to myself");
 
-            wrappedMsg.setLeafNum(member.getLeafNum());
+            } else {
+                WrappedARTMessage wrappedMsg = new WrappedARTMessage();
+                wrappedMsg.setGroupId(groupId);
+                wrappedMsg.setArtMessageClass(SetupMessage.class.getSimpleName());
+                wrappedMsg.setSerializedMessage(setupResult.getArtState().getSetupMessage());
 
-            String body = serializeWrappedMessage(wrappedMsg);
+                wrappedMsg.setLeafNum(member.getLeafNum());
 
-            Recipient recipient = Recipient.from(ctx,member.getAddress(),false);
+                String body = serializeWrappedMessage(wrappedMsg);
 
-            OutgoingTextMessage msg = new OutgoingEncryptedMessage(recipient, body,0);
+                Recipient recipient = Recipient.from(ctx, member.getAddress(), false);
+                Log.w(LOG_TAG,"send setup Message to "+recipient);
 
-            MessageSender.send(ctx,msg,-1,false,null);
+
+                OutgoingTextMessage msg = new OutgoingEncryptedMessage(recipient, body, 0);
+
+                MessageSender.send(ctx, msg, -1, false, null);
+            }
         }
+    }
+
+    public void sendUpdateMessages(String groupId, UpdateMessage updateMessage){
+
+        WrappedARTMessage wrappedMsg = new WrappedARTMessage();
+        wrappedMsg.setGroupId(groupId);
+        wrappedMsg.setArtMessageClass(UpdateMessage.class.getSimpleName());
+        wrappedMsg.setSerializedMessage(updateMessage.serialise());
+
+        String body = serializeWrappedMessage(wrappedMsg);
+
+        Address    groupAddress     = Address.fromSerialized(groupId);
+        Recipient  groupRecipient   = Recipient.from(ctx, groupAddress, false);
+
+        Log.w(LOG_TAG,"sending update Message an "+groupRecipient);
+
+        OutgoingTextMessage msg = new OutgoingEncryptedMessage(groupRecipient, body,0);
+
+        MessageSender.send(ctx,msg,-1,false,null);
+
     }
 
     public boolean isWrappedARTMessage(String body){
@@ -210,17 +226,21 @@ public class ARTGroupManager {
 
         final String groupId = wrappedMsg.getGroupId();
 
+        Log.w(LOG_TAG,"Process setup Message for group"+groupId);
+
+
         if (! SetupMessage.class.getSimpleName().equals(wrappedMsg.getArtMessageClass())) {
             throw new IllegalStateException("Message is not a setup message");
         }
 
         Optional<GroupDatabase.GroupRecord> optionalGroup = DatabaseFactory.getGroupDatabase(ctx).getGroup(groupId);
-        int peerCount = optionalGroup.get().getMembers().size();
 
         Optional<ARTState> optArtState = artDb.getARTState(groupId);
 
         if (! optArtState.isPresent()) {
             // no state yet => create
+            int peerCount = 42;
+
             ARTState state = new ARTState(wrappedMsg.getLeafNum(),peerCount);
 
             IdentityKeyPair myIdKeyPair = IdentityKeyUtil.getIdentityKeyPair(ctx);
@@ -239,6 +259,7 @@ public class ARTGroupManager {
             state.setMyPreKeyPair(dhPreKey);
 
             ART.processSetupMessage(state, authenticatedMessage,wrappedMsg.getLeafNum());
+            Log.w(LOG_TAG,"setup message received and tree created");
 
             artDb.create(wrappedMsg.getGroupId(),state);
         } else {
@@ -280,6 +301,8 @@ public class ARTGroupManager {
             Utils.except("MAC is incorrect for update message.");
         }
 
+        Log.w(LOG_TAG,"Update state from Message");
+
         updateArt.updateStateFromMessage(optState.get(), updateMessage);
         artDb.update(groupID, optState.get());
     }
@@ -306,7 +329,7 @@ public class ARTGroupManager {
 
 
             if (jsonMsg.getOriginalBody()!=null) {
-                return jsonMsg.getOriginalBody();
+                return jsonMsg.getOriginalBody().toString();
             } else {
                 return "We dont have a body";
             }
@@ -503,4 +526,15 @@ public class ARTGroupManager {
             state.setSetupMessage(setupMessageSerialised);
         }
     }
+
+
+    public String handleConversationMessage(WrappedConversationMessage wrappedConversationMessage, byte[] groupId) {
+        byte[] signature = wrappedConversationMessage.getSignature();
+        String origBody = wrappedConversationMessage.getOriginalBody();
+        boolean verfiySign = verifyGroupIdSignature(String.valueOf(groupId), signature);
+        if (verfiySign){
+            Log.d(LOG_TAG,"GroupId Signature verified for gorup "+groupId);
+        }
+        return origBody;
+        }
 }

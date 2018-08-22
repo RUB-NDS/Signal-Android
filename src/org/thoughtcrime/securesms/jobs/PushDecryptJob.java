@@ -3,6 +3,7 @@ package org.thoughtcrime.securesms.jobs;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Path;
 import android.os.Build;
 import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
@@ -48,6 +49,7 @@ import org.thoughtcrime.securesms.groups.UpdateART;
 import org.thoughtcrime.securesms.groups.protocol.JsonARTMessage;
 import org.thoughtcrime.securesms.groups.protocol.JsonMessageDeserializer;
 import org.thoughtcrime.securesms.groups.protocol.WrappedARTMessage;
+import org.thoughtcrime.securesms.groups.protocol.WrappedConversationMessage;
 import org.thoughtcrime.securesms.jobmanager.JobParameters;
 import org.thoughtcrime.securesms.mms.IncomingMediaMessage;
 import org.thoughtcrime.securesms.mms.MmsException;
@@ -183,7 +185,7 @@ public class PushDecryptJob extends ContextJob {
 
   private void handleMessage(SignalServiceEnvelope envelope, Optional<Long> smsMessageId) {
     try {
-      GroupDatabase        groupDatabase = DatabaseFactory.getGroupDatabase(context);//Wichtig: hole Gruppendatenbankeintrag
+      GroupDatabase        groupDatabase = DatabaseFactory.getGroupDatabase(context);//Wichtig: hole Gruppendatenbank
       SignalProtocolStore  axolotlStore  = new SignalProtocolStoreImpl(context);
       SignalServiceAddress localAddress  = new SignalServiceAddress(TextSecurePreferences.getLocalNumber(context));
       SignalServiceCipher  cipher        = new SignalServiceCipher(localAddress, axolotlStore);
@@ -576,21 +578,41 @@ public class PushDecryptJob extends ContextJob {
       String wrappedSerialized = body.substring(ARTGroupManager.ART_CONFIG_IDENTIFIER.length());
       Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
 
+      WrappedConversationMessage wrappedConversationMessage = gson.fromJson(wrappedSerialized, WrappedConversationMessage.class);
+      Log.d(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
 
 
       WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
       Log.d(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
 
       ARTGroupManager mgr = ARTGroupManager.getInstance(null);
-
-      if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())){
-        mgr.processSetupMessage(wrappedARTMessage);
-      } else {
-        UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
-        mgr.processUpdateMessage(wrappedARTMessage);
+      if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
+        if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
+          mgr.processSetupMessage(wrappedARTMessage);
+          return;
+        } else if (UpdateMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
+          UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
+          mgr.processUpdateMessage(wrappedARTMessage);
+          return;
+        } else {
+          Log.d(TAG,"Message is ARTConversationMessage: TODO: handle!");
+          byte[] signature = wrappedConversationMessage.getSignature();
+          boolean verifySign = mgr.verifyGroupIdSignature(mediaMessage.getGroupId().toString(), signature);
+          String originalBody = wrappedConversationMessage.getOriginalBody();
+          if (originalBody!=null) {
+            Optional<String> originalBodyOptional = (Optional<String>) originalBody;
+            mediaMessage = new IncomingMediaMessage(Address.fromExternal(context, envelope.getSource()),
+                    message.getTimestamp(), -1,
+                    message.getExpiresInSeconds() * 1000L, false,
+                    Optional.fromNullable(envelope.getRelay()),
+                    originalBodyOptional,
+                    message.getGroupInfo(),
+                    message.getAttachments(),
+                    quote,
+                    sharedContacts);
+          }
+        }
       }
-
-      return;
     }
 
 
@@ -691,6 +713,37 @@ public class PushDecryptJob extends ContextJob {
       handleExpirationUpdate(envelope, message, Optional.absent());
     }
 
+    // filter silent ART messages
+    if (body.startsWith(ARTGroupManager.ART_CONFIG_IDENTIFIER)){
+
+      envelope.getSourceAddress();
+
+
+      String wrappedSerialized = body.substring(ARTGroupManager.ART_CONFIG_IDENTIFIER.length());
+      Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
+
+      WrappedConversationMessage wrappedConversationMessage = gson.fromJson(wrappedSerialized, WrappedConversationMessage.class);
+      Log.d(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
+
+      WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
+      Log.d(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
+
+      ARTGroupManager mgr = ARTGroupManager.getInstance(null);
+      if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
+        if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
+          mgr.processSetupMessage(wrappedARTMessage);
+          return;
+        } else if (UpdateMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
+          UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
+          mgr.processUpdateMessage(wrappedARTMessage);
+          return;
+        } else {
+          Log.d(TAG,"Message is ARTConversationMessage: TODO: handle!");
+          body = mgr.handleConversationMessage(wrappedConversationMessage, message.getGroupInfo().get().getGroupId());
+        }
+      }
+    }
+
     Long threadId;
 
     if (smsMessageId.isPresent() && !message.getGroupInfo().isPresent()) {
@@ -704,14 +757,13 @@ public class PushDecryptJob extends ContextJob {
 
       textMessage = new IncomingEncryptedMessage(textMessage, body);
 
+      /* used to test sending and receiving wrapped message
       ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
 
       grpMgr.checkMessage(textMessage);
 
       SessionStore sessionStore = new TextSecureSessionStore(context);
-      Log.d(TAG,"Envelope source: "+envelope.getSource());
-
-
+      Log.d(TAG,"Envelope source: "+envelope.getSource());*/
 
       Optional<InsertResult> insertResult = database.insertMessageInbox(textMessage);
 
