@@ -1,0 +1,3 @@
+-dontwarn com.facebook.thrift.server.*
+-dontwarn org.iq80.snappy.*
+-dontwarn com.facebook.research.asynchronousratchetingtree.Utils
