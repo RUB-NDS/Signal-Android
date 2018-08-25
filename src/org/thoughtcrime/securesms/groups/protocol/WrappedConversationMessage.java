@@ -7,6 +7,7 @@ import javax.crypto.Cipher;
 public class WrappedConversationMessage extends JsonARTMessage {
 
     private byte[] signature;
+    private String groupId;
 
     public WrappedConversationMessage() {
         super(WrappedConversationMessage.class);
@@ -22,5 +23,13 @@ public class WrappedConversationMessage extends JsonARTMessage {
 
     public byte[] getSignature() {
         return signature;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId;
+    }
+
+    public String getGroupId() {
+        return groupId;
     }
 }
