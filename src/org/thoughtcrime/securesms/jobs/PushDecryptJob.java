@@ -107,8 +107,10 @@ import org.whispersystems.signalservice.api.messages.multidevice.VerifiedMessage
 import org.whispersystems.signalservice.api.messages.shared.SharedContact;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 
+import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.interfaces.ECPublicKey;
+import java.time.temporal.ValueRange;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -574,16 +576,15 @@ public class PushDecryptJob extends ContextJob {
 
       envelope.getSourceAddress();
 
-
       String wrappedSerialized = body.substring(ARTGroupManager.ART_CONFIG_IDENTIFIER.length());
       Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
 
       WrappedConversationMessage wrappedConversationMessage = gson.fromJson(wrappedSerialized, WrappedConversationMessage.class);
-      Log.d(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
+      Log.w(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
 
 
       WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
-      Log.d(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
+      Log.w(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
 
       ARTGroupManager mgr = ARTGroupManager.getInstance(null);
       if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
@@ -595,12 +596,13 @@ public class PushDecryptJob extends ContextJob {
           mgr.processUpdateMessage(wrappedARTMessage);
           return;
         } else {
-          Log.d(TAG,"Message is ARTConversationMessage: TODO: handle!");
+          Log.w(TAG,"Message is ARTConversationMessage:"+wrappedConversationMessage.getOriginalBody());
           byte[] signature = wrappedConversationMessage.getSignature();
           boolean verifySign = mgr.verifyGroupIdSignature(mediaMessage.getGroupId().toString(), signature);
+          Log.w(TAG, "Message has a valid Signature:"+verifySign);
           String originalBody = wrappedConversationMessage.getOriginalBody();
           if (originalBody!=null) {
-            Optional<String> originalBodyOptional = (Optional<String>) originalBody;
+            Optional<String> originalBodyOptional = Optional.fromNullable(originalBody);
             mediaMessage = new IncomingMediaMessage(Address.fromExternal(context, envelope.getSource()),
                     message.getTimestamp(), -1,
                     message.getExpiresInSeconds() * 1000L, false,
@@ -723,10 +725,10 @@ public class PushDecryptJob extends ContextJob {
       Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
 
       WrappedConversationMessage wrappedConversationMessage = gson.fromJson(wrappedSerialized, WrappedConversationMessage.class);
-      Log.d(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
+      Log.w(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
 
       WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
-      Log.d(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
+      Log.w(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
 
       ARTGroupManager mgr = ARTGroupManager.getInstance(null);
       if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
@@ -734,12 +736,14 @@ public class PushDecryptJob extends ContextJob {
           mgr.processSetupMessage(wrappedARTMessage);
           return;
         } else if (UpdateMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
-          UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
           mgr.processUpdateMessage(wrappedARTMessage);
           return;
         } else {
-          Log.d(TAG,"Message is ARTConversationMessage: TODO: handle!");
-          body = mgr.handleConversationMessage(wrappedConversationMessage, message.getGroupInfo().get().getGroupId());
+          Log.w(TAG,"Message is ARTConversationMessage");
+
+          String groupId = wrappedConversationMessage.getGroupId();
+
+          body = mgr.handleConversationMessage(wrappedConversationMessage,groupId );
         }
       }
     }

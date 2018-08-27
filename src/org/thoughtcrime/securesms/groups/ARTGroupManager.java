@@ -10,12 +10,17 @@ import com.facebook.research.asynchronousratchetingtree.art.ARTState;
 import com.facebook.research.asynchronousratchetingtree.art.message.AuthenticatedMessage;
 import com.facebook.research.asynchronousratchetingtree.art.message.SetupMessage;
 import com.facebook.research.asynchronousratchetingtree.art.message.UpdateMessage;
+import com.facebook.research.asynchronousratchetingtree.art.tree.Node;
+import com.facebook.research.asynchronousratchetingtree.art.tree.ParentNode;
+import com.facebook.research.asynchronousratchetingtree.art.tree.SecretParentNode;
 import com.facebook.research.asynchronousratchetingtree.crypto.Crypto;
 import com.facebook.research.asynchronousratchetingtree.crypto.DHKeyPair;
 import com.facebook.research.asynchronousratchetingtree.crypto.DHPubKey;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import org.thoughtcrime.securesms.attachments.Attachment;
+import org.thoughtcrime.securesms.contactshare.Contact;
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil;
 import org.thoughtcrime.securesms.database.ARTStateSerializer;
 import org.thoughtcrime.securesms.database.Address;
@@ -25,10 +30,15 @@ import org.thoughtcrime.securesms.database.GroupDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase;
 import org.thoughtcrime.securesms.database.MmsDatabase;
 import org.thoughtcrime.securesms.database.SessionDatabase;
+import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.groups.protocol.JsonARTMessage;
 import org.thoughtcrime.securesms.groups.protocol.JsonMessageDeserializer;
 import org.thoughtcrime.securesms.groups.protocol.WrappedARTMessage;
 import org.thoughtcrime.securesms.groups.protocol.WrappedConversationMessage;
+import org.thoughtcrime.securesms.mms.OutgoingGroupMediaMessage;
+import org.thoughtcrime.securesms.mms.OutgoingMediaMessage;
+import org.thoughtcrime.securesms.mms.OutgoingSecureMediaMessage;
+import org.thoughtcrime.securesms.mms.SlideDeck;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.sms.IncomingTextMessage;
 import org.thoughtcrime.securesms.sms.MessageSender;
@@ -43,8 +53,10 @@ import org.whispersystems.libsignal.ecc.ECPublicKey;
 import org.whispersystems.libsignal.state.SessionRecord;
 import org.whispersystems.libsignal.util.guava.Optional;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -96,7 +108,6 @@ public class ARTGroupManager {
 
     }
 
-
     public void updateKey(String groupId) {
 
         Address ownAddress = Address.fromSerialized(TextSecurePreferences.getLocalNumber(ctx));
@@ -113,19 +124,27 @@ public class ARTGroupManager {
 
         Optional<GroupDatabase.GroupRecord> group = DatabaseFactory.getGroupDatabase(ctx).getGroup(groupId);
 
-        Address grpAddress = Address.fromSerialized(groupId);
+        Address    groupAddress     = Address.fromSerialized(groupId);
+        Recipient  groupRecipient   = Recipient.from(ctx, groupAddress, false);
 
-        Log.d(LOG_TAG,"is Group Addr?: "+grpAddress.isGroup());
+        Log.d(LOG_TAG,"is Group Addr?: "+groupAddress.isGroup());
 
-        String wrappedARTMessage = wrapMessage(groupId, authenticatedUpdateMessage, UpdateMessage.class);
+        WrappedARTMessage wrappedMsg = wrapMessage(groupId, authenticatedUpdateMessage, UpdateMessage.class);
+        String body = serializeWrappedMessage(wrappedMsg);
 
-        /*OutgoingTextMessage sendArtMessage =
+        Log.w(LOG_TAG,"sending update Message to "+groupRecipient);
 
-                new OutgoingEncryptedMessage(Recipient.from(ctx, grpAddress, false),
-                        wrappedARTMessage, 0);*/
-        /*MessageSender.send(ctx,sendArtMessage,-1,false,null);*/
+        List<Attachment> attachments = new ArrayList<>();
+        List<Contact> contacts = new ArrayList<>();
+        int distributionType = ThreadDatabase.DistributionTypes.CONVERSATION;
 
+        OutgoingMediaMessage msg = new OutgoingSecureMediaMessage(groupRecipient, body,
+                attachments, System.currentTimeMillis(),distributionType, 0, null, contacts);
+
+        // update before send!
         artDb.update(groupId,state);
+
+        MessageSender.send(ctx,msg,-1,false,null);
     }
 
     public void sendSetupMessages(String groupId, SetupResult setupResult){
@@ -135,10 +154,8 @@ public class ARTGroupManager {
                 Log.w(LOG_TAG,"do not send setup message to myself");
 
             } else {
-                WrappedARTMessage wrappedMsg = new WrappedARTMessage();
-                wrappedMsg.setGroupId(groupId);
-                wrappedMsg.setArtMessageClass(SetupMessage.class.getSimpleName());
-                wrappedMsg.setSerializedMessage(setupResult.getArtState().getSetupMessage());
+
+                WrappedARTMessage wrappedMsg = wrapMessage(groupId, setupResult.getArtState().getSetupMessage(), SetupMessage.class);
 
                 wrappedMsg.setLeafNum(member.getLeafNum());
 
@@ -146,7 +163,6 @@ public class ARTGroupManager {
 
                 Recipient recipient = Recipient.from(ctx, member.getAddress(), false);
                 Log.w(LOG_TAG,"send setup Message to "+recipient);
-
 
                 OutgoingTextMessage msg = new OutgoingEncryptedMessage(recipient, body, 0);
 
@@ -179,18 +195,19 @@ public class ARTGroupManager {
         return body.startsWith(ART_CONFIG_IDENTIFIER);
     }
 
-    private String wrapMessage(String id, AuthenticatedMessage authMsg, Class classOfMsg) {
+    private WrappedARTMessage wrapMessage(String id, AuthenticatedMessage authMsg, Class classOfMsg) {
+        return wrapMessage(id,authMsg.serialise(),classOfMsg);
+    }
+
+    private WrappedARTMessage wrapMessage(String id, byte[] serializedMsg, Class classOfMsg) {
         WrappedARTMessage wrappedMsg = new WrappedARTMessage();
 
-        byte[] serializedMsg = authMsg.serialise();
         wrappedMsg.setSerializedMessage(serializedMsg);
         wrappedMsg.setArtMessageClass(classOfMsg.getSimpleName());
         wrappedMsg.setGroupId(id);
 
-
-        return gson.toJson(wrappedMsg);
+        return wrappedMsg;
     }
-
 
     public UpdateMessage unwrapUpdateMessage(WrappedARTMessage wrappedMsg) {
         AuthenticatedMessage authMsg = new AuthenticatedMessage(wrappedMsg.getSerializedMessage());
@@ -200,7 +217,6 @@ public class ARTGroupManager {
         UpdateMessage retval = new UpdateMessage(serializedMsg);
 
         return retval;
-
     }
 
     public SetupMessage unwrapSetupMessage(WrappedARTMessage wrappedMsg) {
@@ -259,12 +275,38 @@ public class ARTGroupManager {
             state.setMyPreKeyPair(dhPreKey);
 
             ART.processSetupMessage(state, authenticatedMessage,wrappedMsg.getLeafNum());
-            Log.w(LOG_TAG,"setup message received and tree created");
+            Log.w(LOG_TAG,"setup message received and tree created for group"+groupId+" I'm peer number "+state.getPeerNum());
+
+            ParentNode root =  (SecretParentNode) state.getTree();
+
+            dumpSimpleTree(root);
 
             artDb.create(wrappedMsg.getGroupId(),state);
+            Log.w(LOG_TAG,"State stored in database:" +artDb.getARTState(groupId).isPresent());
+
         } else {
             Log.w(LOG_TAG,"setup message received with existing ART - ignoring");
         }
+    }
+
+    private void dumpSimpleTree(ParentNode root) {
+
+        if (root==null) {
+            Log.e(LOG_TAG, "Tree is null");
+            return;
+        }
+
+        Node leftChild = root.getLeft();
+        Node rightChild = root.getRight();
+
+        Log.i(LOG_TAG,"Root pubkey: "+root.getPubKey());
+        Log.i(LOG_TAG, "Left pubkey: "+hexDump(leftChild.getPubKey().getPubKeyBytes()));
+
+        Log.i(LOG_TAG, "left is leaf? "+(leftChild.numLeaves()==1));
+        Log.i(LOG_TAG, "Right is leaf? "+(rightChild.numLeaves()==1));
+
+        Log.i(LOG_TAG,"Right pubkey: "+hexDump(rightChild.getPubKey().getPubKeyBytes()));
+
     }
 
     private DHKeyPair convertToDHKeyPair(ECPrivateKey privateKey) {
@@ -273,7 +315,15 @@ public class ARTGroupManager {
 
     private DHPubKey convertToDHPubKey(ECPublicKey pubKey) {
         // works because same EC !
-        return DHPubKey.pubKey(pubKey.serialize());
+
+        // the serialized key contains the Curve Type which must be removed!
+        byte[] serializedKey = pubKey.serialize();
+
+        // We have to strip the EC Type prefix!;
+        byte[] purePubKey = new byte[ECPublicKey.KEY_SIZE-1];
+
+        System.arraycopy(serializedKey,1, purePubKey,0,purePubKey.length);
+        return DHPubKey.pubKey(purePubKey);
     }
 
     private DHKeyPair convertToDHKeyPair(ECKeyPair keyPair) {
@@ -283,7 +333,7 @@ public class ARTGroupManager {
 
     public void processUpdateMessage(WrappedARTMessage wrappedMsg) {
 
-        if (! SetupMessage.class.getSimpleName().equals(wrappedMsg.getArtMessageClass())) {
+        if (! UpdateMessage.class.getSimpleName().equals(wrappedMsg.getArtMessageClass())) {
             throw new IllegalStateException("Message is not an update message");
         }
         AuthenticatedMessage authenticatedMessage = new AuthenticatedMessage(wrappedMsg.getSerializedMessage());
@@ -331,7 +381,7 @@ public class ARTGroupManager {
             if (jsonMsg.getOriginalBody()!=null) {
                 return jsonMsg.getOriginalBody().toString();
             } else {
-                return "We dont have a body";
+                return "";
             }
 
         } else {
@@ -361,7 +411,7 @@ public class ARTGroupManager {
             if ( jsonMsg instanceof WrappedConversationMessage) {
                 WrappedConversationMessage conversationMessage = (WrappedConversationMessage) jsonMsg;
                 boolean checkResult = verifyGroupIdSignature(String.valueOf(textMessage.getGroupId()),conversationMessage.getSignature());
-                Log.d(LOG_TAG,"Signature check: "+checkResult);
+                Log.w(LOG_TAG,"Signature check: "+checkResult);
             }
         }
     }
@@ -374,7 +424,11 @@ public class ARTGroupManager {
             Log.w(LOG_TAG,"No art state found - faking signature!");
             return new byte[] { 0,1,2,3,4,5,6,7,8 };
         } else {
+            UpdateART updateART = new UpdateART();
+            updateART.updateStageKey(optGrpState);
             byte[] secret = optGrpState.get().getStageKey();
+
+            Log.w(LOG_TAG,"Secret: "+hexDump(secret));
 
             return Crypto.hmacSha256(groupId.getBytes(),secret);
         }
@@ -382,17 +436,23 @@ public class ARTGroupManager {
 
     public boolean verifyGroupIdSignature(String groupId, byte[] signature) {
         Optional<ARTState> optGrpState = artDb.getARTState(groupId);
+        Log.w(LOG_TAG,"State from database for group"+groupId+"found"+artDb.getARTState(groupId).isPresent());
 
-        if (! optGrpState.isPresent()) {
+
+        if (!optGrpState.isPresent()) {
             // TODO: we should throw an exception here ...
             Log.w(LOG_TAG,"No art state found - verifying fake signature!");
-            return true;
+            return false;
         } else {
+            UpdateART updateART = new UpdateART();
+            updateART.updateStageKey(optGrpState);
             byte[] secret = optGrpState.get().getStageKey();
-
             byte[] verifySignature = Crypto.hmacSha256(groupId.getBytes(),secret);
+            boolean verified = Arrays.equals(signature,verifySignature);
 
-            return Arrays.equals(signature,verifySignature);
+            Log.w(LOG_TAG,"art state found: signature verification: "+verified);
+
+            return verified;
         }
     }
 
@@ -412,23 +472,6 @@ public class ARTGroupManager {
 
         return gson.fromJson(jsonString,JsonARTMessage.class);
     }
-
-    /* OFF
-     public static void processSetupMessage(Context context, WrappedARTMessage wrappedMsg){
-
-        AuthenticatedMessage message = new AuthenticatedMessage(wrappedMsg.getSerializedMessage());
-        SetupMessage setupMsg = new SetupMessage(message.getMessage());
-        ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
-
-        grpMgr.processSetupMessage(wrappedMsg);
-
-
-
-
-        ART.processSetupMessage(wrappedMsg.getArtState(), message, wrappedMsg.getLeafNum());
-    }
-
-     */
 
     /**
      * Used by @see {@link GroupManager}
@@ -454,16 +497,18 @@ public class ARTGroupManager {
 
         artMemberSet.add(new ARTGroupMember(myAddress,0));
 
-        List<DHPubKey> peers = new ArrayList<>();
-        List<IdentityKey> idKeys = new ArrayList<>();
+        DHPubKey[] peers = new DHPubKey[pMembers.size()+1];
+        Map<Integer, IdentityKey> idKeys = new HashMap<>();
 
         int peerNum = 0;
         IdentityKeyPair myIdKeyPair = IdentityKeyUtil.getIdentityKeyPair(ctx);
 
         DHKeyPair myDhIdKeyPair = convertToDHKeyPair(myIdKeyPair.getPrivateKey());
+
+        Log.d(LOG_TAG,"my id pubkey: "+hexDump(myDhIdKeyPair.getPubKeyBytes()));
         state.setIdentityKeyPair(myDhIdKeyPair);
 
-        peers.add(myDhIdKeyPair.getPubKey());
+        peers[0] = myDhIdKeyPair.getPubKey();
 
         for (Address memberAddr: pMembers) { // get all members of the group
             peerNum++;
@@ -487,14 +532,20 @@ public class ARTGroupManager {
                 IdentityKey idKey = session.getSessionState().getRemoteIdentityKey();
                 ECPublicKey idPubkey = idKey.getPublicKey();
 
-                idKeys.add(idKey);
-                DHPubKey idDhPub = DHPubKey.pubKey(idPubkey.serialize());
-                state.setPreKeyFor(peerNum, idDhPub);
-                peers.add(idDhPub);
+                idKeys.put(peerNum,idKey);
+                DHPubKey peerIdPubKey = convertToDHPubKey(idPubkey);
+
+                Log.d(LOG_TAG,"Peer id pubkey #"+peerNum+":" +hexDump(peerIdPubKey.getPubKeyBytes()));
+
+                state.setPreKeyFor(peerNum, peerIdPubKey);
+                peers[peerNum] = peerIdPubKey;
             }
         }
 
         generateSetupMessage(state, peers);
+
+        dumpSimpleTree((ParentNode) state.getTree());
+
 
         Log.d(LOG_TAG,"Storing GroupART for groupId "+groupId);
         artDb.create(groupId, state);
@@ -505,6 +556,11 @@ public class ARTGroupManager {
         return result;
     }
 
+    private String hexDump(byte[] pubKeyBytes) {
+        BigInteger bi = new BigInteger(pubKeyBytes);
+        return bi.toString(16);
+    }
+
     /**
      * generates the setup message and puts the serialized version into the passed state
      *
@@ -512,29 +568,29 @@ public class ARTGroupManager {
      * @param peerIdentities list of identity pubkeys
      * @return the non-serialized authenticated setup message
      */
-    private void generateSetupMessage(ARTState state, List<DHPubKey> peerIdentities){
+    private void generateSetupMessage(ARTState state, DHPubKey[] peerIdentities){
         byte[] setupMessageSerialised = state.getSetupMessage();
 
         if (setupMessageSerialised == null){
             Map<Integer, DHPubKey> preKeys = new HashMap<>();
 
-            for (int i = 1; i<peerIdentities.size(); i++){
+            for (int i = 1; i<peerIdentities.length; i++){
+                Log.i(LOG_TAG,"Pre key #"+i+": "+ hexDump(state.getPreKeyFor(i).getPubKeyBytes()));
                 preKeys.put(i,state.getPreKeyFor(i));
             }
-            AuthenticatedMessage setupMessage = ART.setupGroup(state, peerIdentities.toArray(new DHPubKey[]{}), preKeys);
+            AuthenticatedMessage setupMessage = ART.setupGroup(state, peerIdentities, preKeys);
             setupMessageSerialised = setupMessage.serialise();
             state.setSetupMessage(setupMessageSerialised);
         }
     }
 
 
-    public String handleConversationMessage(WrappedConversationMessage wrappedConversationMessage, byte[] groupId) {
+    public String handleConversationMessage(WrappedConversationMessage wrappedConversationMessage, String groupId) {
         byte[] signature = wrappedConversationMessage.getSignature();
         String origBody = wrappedConversationMessage.getOriginalBody();
-        boolean verfiySign = verifyGroupIdSignature(String.valueOf(groupId), signature);
-        if (verfiySign){
-            Log.d(LOG_TAG,"GroupId Signature verified for gorup "+groupId);
-        }
+        boolean verfySign = verifyGroupIdSignature(groupId, signature);
+        Log.w(LOG_TAG,"GroupId signature verification result: "+verfySign);
+
         return origBody;
         }
 }

@@ -1711,9 +1711,14 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       WrappedConversationMessage msg = new WrappedConversationMessage();
       msg.setOriginalBody(getMessage());
 
-      String groupId = recipient.getAddress().toString();
+      String groupId = recipient.getAddress().toGroupString();
+
       ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
+
+
       msg.setSignature(grpMgr.signGroupId(groupId));
+      msg.setGroupId(groupId);
+      Log.w(TAG,"signed group Message for group "+groupId );
 
       messageBody = grpMgr.serializeWrappedMessage(msg);
     } else {

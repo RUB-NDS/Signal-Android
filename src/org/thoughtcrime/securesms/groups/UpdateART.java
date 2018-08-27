@@ -26,6 +26,7 @@ import org.thoughtcrime.securesms.database.Database;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupARTDatabase;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos;
 
 import java.util.ArrayList;
@@ -60,6 +61,8 @@ public class UpdateART {
         deriveStageKey(state);
         return new AuthenticatedMessage(serialisedUpdateMessage, mac);
     }
+
+
 
     private void deriveStageKey(ARTState state) {
         state.setStageKey(
@@ -159,6 +162,11 @@ public class UpdateART {
 
         tree = updateTreeWithPublicPath(tree, updateMessage.getLeafNum(), updateMessage.getPath(), 0);
         state.setTree((SecretNode) tree);
+        deriveStageKey(state);
+    }
+
+    public void updateStageKey(Optional<ARTState> optGrpState) {
+        ARTState state = optGrpState.get();
         deriveStageKey(state);
     }
 }
