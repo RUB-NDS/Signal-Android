@@ -46,15 +46,4 @@ public class WrappedARTMessage extends JsonARTMessage {
         return serializedMessage;
     }
 
-    public SetupMessage unwrapAsSetupMessage() {
-        SetupMessage msg = new SetupMessage(serializedMessage);
-        return msg;
-    }
-
-    public UpdateMessage unwrapAsUpdateMessage() {
-        UpdateMessage msg = new UpdateMessage(serializedMessage);
-        return msg;
-    }
-
-
 }
