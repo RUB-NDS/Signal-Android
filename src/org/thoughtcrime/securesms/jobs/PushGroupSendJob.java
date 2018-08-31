@@ -16,6 +16,7 @@ import org.thoughtcrime.securesms.database.MmsDatabase;
 import org.thoughtcrime.securesms.database.NoSuchMessageException;
 import org.thoughtcrime.securesms.database.documents.NetworkFailure;
 import org.thoughtcrime.securesms.dependencies.InjectableType;
+import org.thoughtcrime.securesms.groups.ARTGroupManager;
 import org.thoughtcrime.securesms.jobmanager.JobParameters;
 import org.thoughtcrime.securesms.jobmanager.requirements.NetworkBackoffRequirement;
 import org.thoughtcrime.securesms.jobmanager.requirements.NetworkRequirement;
@@ -84,7 +85,10 @@ public class PushGroupSendJob extends PushSendJob implements InjectableType {
       throws MmsException, IOException, NoSuchMessageException
   {
     MmsDatabase          database = DatabaseFactory.getMmsDatabase(context);
+    ARTGroupManager.createInstance(context);
     OutgoingMediaMessage message  = database.getOutgoingMessage(messageId);
+
+    Log.d(TAG,"Sending body: "+message.getBody());
 
     try {
       deliver(message, filterAddress == null ? null : Address.fromSerialized(filterAddress));
@@ -171,7 +175,7 @@ public class PushGroupSendJob extends PushSendJob implements InjectableType {
       SignalServiceDataMessage  groupDataMessage = SignalServiceDataMessage.newBuilder()
                                                                            .withTimestamp(message.getSentTimeMillis())
                                                                            .withExpiration(message.getRecipient().getExpireMessages())
-                                                                           .asGroupMessage(group)
+                                                                           .asGroupMessage(group).withBody(message.getBody())
                                                                            .build();
 
       messageSender.sendMessage(addresses, groupDataMessage);

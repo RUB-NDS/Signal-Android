@@ -65,6 +65,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.facebook.research.asynchronousratchetingtree.art.ARTState;
 import com.google.android.gms.location.places.ui.PlacePicker;
 import com.google.protobuf.ByteString;
 
@@ -108,6 +109,7 @@ import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.DraftDatabase;
 import org.thoughtcrime.securesms.database.DraftDatabase.Draft;
 import org.thoughtcrime.securesms.database.DraftDatabase.Drafts;
+import org.thoughtcrime.securesms.database.GroupARTDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase.IdentityRecord;
 import org.thoughtcrime.securesms.database.IdentityDatabase.VerifiedStatus;
@@ -1707,14 +1709,18 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     String messageBody = null;
 
-    if (recipient.getAddress().isGroup()) {
-      WrappedConversationMessage msg = new WrappedConversationMessage();
-      msg.setOriginalBody(getMessage());
-
+    if (recipient.getAddress().isGroup() ) {
       String groupId = recipient.getAddress().toGroupString();
-
       ARTGroupManager grpMgr = ARTGroupManager.getInstance(context);
 
+      //need possibility to create new tree, when one member has left the group....
+      GroupARTDatabase groupARTDatabase = DatabaseFactory.getGroupARTDatabase(context);
+      Optional<ARTState> databaseState = groupARTDatabase.getARTState(groupId);
+      if (!databaseState.isPresent()){
+        ARTState state = grpMgr.createNewTree(groupId);
+      }
+      WrappedConversationMessage msg = new WrappedConversationMessage();
+      msg.setOriginalBody(getMessage());
 
       msg.setSignature(grpMgr.signGroupId(groupId));
       msg.setGroupId(groupId);

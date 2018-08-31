@@ -7,6 +7,9 @@ import android.util.Log;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.database.Address;
+import org.thoughtcrime.securesms.groups.ARTGroupManager;
+import org.thoughtcrime.securesms.groups.protocol.JsonARTMessage;
+import org.thoughtcrime.securesms.groups.protocol.WrappedARTGroupContext;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientModifiedListener;
 
@@ -48,7 +51,21 @@ public class GroupUtil {
     }
 
     try {
-      GroupContext  groupContext = GroupContext.parseFrom(Base64.decode(encodedGroup));
+
+      String base64Group;
+
+      ARTGroupManager grpMgr = ARTGroupManager.getInstance();
+      if ( ARTGroupManager.getInstance().isWrappedARTMessage(encodedGroup)) {
+        Log.d(TAG,"ART Group Message!");
+
+        WrappedARTGroupContext msg = grpMgr.deserializeMessage(encodedGroup, WrappedARTGroupContext.class);
+
+        base64Group = msg.getGroupContext();
+      } else {
+        base64Group = encodedGroup;
+      }
+
+      GroupContext  groupContext = GroupContext.parseFrom(Base64.decode(base64Group));
       return new GroupDescription(context, groupContext);
     } catch (IOException e) {
       Log.w(TAG, e);

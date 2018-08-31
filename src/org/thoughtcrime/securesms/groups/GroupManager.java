@@ -132,6 +132,8 @@ public class GroupManager {
         avatarAttachment = new UriAttachment(avatarUri, MediaUtil.IMAGE_PNG, AttachmentDatabase.TRANSFER_PROGRESS_DONE, avatar.length, null, false, false);
       }
 
+      ARTGroupManager artGrpM = ARTGroupManager.getInstance(context);
+
       OutgoingGroupMediaMessage outgoingMessage = new OutgoingGroupMediaMessage(groupRecipient, groupContext, avatarAttachment, System.currentTimeMillis(), 0, null, Collections.emptyList());
       long                      threadId        = MessageSender.send(context, outgoingMessage, -1, false, null);
 

@@ -3,6 +3,7 @@ package org.thoughtcrime.securesms.mms;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
+import android.util.Log;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
 import org.thoughtcrime.securesms.contactshare.Contact;
@@ -14,6 +15,7 @@ import java.util.Map;
 
 public class OutgoingMediaMessage {
 
+  private static final String TAG = OutgoingMediaMessage.class.getSimpleName();
   private   final Recipient        recipient;
   protected final String           body;
   protected final List<Attachment> attachments;
@@ -41,6 +43,8 @@ public class OutgoingMediaMessage {
     this.outgoingQuote    = outgoingQuote;
 
     this.contacts.addAll(contacts);
+
+    Log.i(TAG, "body: "+this.body );
   }
 
   public OutgoingMediaMessage(Recipient recipient, SlideDeck slideDeck, String message, long sentTimeMillis, int subscriptionId, long expiresIn, int distributionType, @Nullable QuoteModel outgoingQuote, @NonNull List<Contact> contacts)

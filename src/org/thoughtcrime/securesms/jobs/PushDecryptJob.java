@@ -3,7 +3,6 @@ package org.thoughtcrime.securesms.jobs;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Path;
 import android.os.Build;
 import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
@@ -43,11 +42,10 @@ import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
 import org.thoughtcrime.securesms.groups.ARTGroupManager;
-import org.thoughtcrime.securesms.groups.BuildART;
 import org.thoughtcrime.securesms.groups.GroupMessageProcessor;
-import org.thoughtcrime.securesms.groups.UpdateART;
 import org.thoughtcrime.securesms.groups.protocol.JsonARTMessage;
 import org.thoughtcrime.securesms.groups.protocol.JsonMessageDeserializer;
+import org.thoughtcrime.securesms.groups.protocol.WrappedARTGroupContext;
 import org.thoughtcrime.securesms.groups.protocol.WrappedARTMessage;
 import org.thoughtcrime.securesms.groups.protocol.WrappedConversationMessage;
 import org.thoughtcrime.securesms.jobmanager.JobParameters;
@@ -80,10 +78,8 @@ import org.whispersystems.libsignal.InvalidMessageException;
 import org.whispersystems.libsignal.InvalidVersionException;
 import org.whispersystems.libsignal.LegacyMessageException;
 import org.whispersystems.libsignal.NoSessionException;
-import org.whispersystems.libsignal.SignalProtocolAddress;
 import org.whispersystems.libsignal.UntrustedIdentityException;
 import org.whispersystems.libsignal.protocol.PreKeySignalMessage;
-import org.whispersystems.libsignal.state.SessionRecord;
 import org.whispersystems.libsignal.state.SessionStore;
 import org.whispersystems.libsignal.state.SignalProtocolStore;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -106,11 +102,9 @@ import org.whispersystems.signalservice.api.messages.multidevice.SignalServiceSy
 import org.whispersystems.signalservice.api.messages.multidevice.VerifiedMessage;
 import org.whispersystems.signalservice.api.messages.shared.SharedContact;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
+import org.whispersystems.signalservice.internal.push.SignalServiceProtos;
 
-import java.io.IOException;
 import java.security.MessageDigest;
-import java.security.interfaces.ECPublicKey;
-import java.time.temporal.ValueRange;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -196,6 +190,8 @@ public class PushDecryptJob extends ContextJob {
 
       if (content.getDataMessage().isPresent()) {
         SignalServiceDataMessage message        = content.getDataMessage().get();
+
+        Log.i(TAG,"handle group message body: "+content.getDataMessage().get().getBody().get());
         boolean                  isMediaMessage = message.getAttachments().isPresent() || message.getQuote().isPresent() || message.getSharedContacts().isPresent();
 
         if      (message.isEndSession())        handleEndSessionMessage(envelope, message, smsMessageId);
@@ -403,7 +399,36 @@ public class PushDecryptJob extends ContextJob {
                                   @NonNull Optional<Long> smsMessageId)
       throws MmsException
   {
-    GroupMessageProcessor.process(context, envelope, message, false); //Rufe GroupMessageProcessor auf
+    String body = message.getBody().get();
+    Log.i(TAG,"Class: "+message.getClass().getSimpleName()+" body: "+body+ "time: "+message.getTimestamp());
+
+    ARTGroupManager mgr = ARTGroupManager.getInstance();
+    boolean validated = false;
+
+    if (mgr.isWrappedARTMessage(body)){
+
+      WrappedARTGroupContext wrappedARTGroupContext = mgr.deserializeMessage(body,WrappedARTGroupContext.class);
+
+      Log.w(TAG,"Wrapped Group Update message received");
+
+      if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
+        if (SetupMessage.class.getSimpleName().equals(WrappedARTGroupContext.class)) {
+          SignalServiceProtos.GroupContext groupContext = mgr.processGroupUpdateMessage(wrappedARTGroupContext);
+          if (groupContext == null) {
+            createAdministrativeTextMessage(envelope, message, smsMessageId, "Invalid Signature for Group Update. Ignorign!");
+          }else {
+            validated = true;
+          }
+        }
+      }
+    } else if (message.getGroupInfo().isPresent()){
+      Log.i(TAG,"non ART messageBody: "+body);
+      createAdministrativeTextMessage(envelope, message, smsMessageId, "received unauthenticated group update! Ignorign!");
+
+    }
+    if (validated) {
+      GroupMessageProcessor.process(context, envelope, message, false); //Rufe GroupMessageProcessor auf
+    }
 
     if (message.getExpiresInSeconds() != 0 && message.getExpiresInSeconds() != getMessageDestination(envelope, message).getExpireMessages()) {
       handleExpirationUpdate(envelope, message, Optional.absent());
@@ -412,6 +437,7 @@ public class PushDecryptJob extends ContextJob {
     if (smsMessageId.isPresent()) {//Falls smsMessageID existiert -> Lösche aus Datenbank
       DatabaseFactory.getSmsDatabase(context).deleteMessage(smsMessageId.get());
     }
+
   }
 
   private void handleUnknownGroupMessage(@NonNull SignalServiceEnvelope envelope,
@@ -577,30 +603,34 @@ public class PushDecryptJob extends ContextJob {
       envelope.getSourceAddress();
 
       String wrappedSerialized = body.substring(ARTGroupManager.ART_CONFIG_IDENTIFIER.length());
-      Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
 
-      WrappedConversationMessage wrappedConversationMessage = gson.fromJson(wrappedSerialized, WrappedConversationMessage.class);
+      ARTGroupManager mgr = ARTGroupManager.getInstance();
+
+      WrappedConversationMessage wrappedConversationMessage = mgr.deserializeMessage(wrappedSerialized, WrappedConversationMessage.class);
       Log.w(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
 
-
-      WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
+      WrappedARTMessage wrappedARTMessage = mgr.deserializeMessage(wrappedSerialized, WrappedARTMessage.class);
       Log.w(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
 
-      ARTGroupManager mgr = ARTGroupManager.getInstance(null);
+
       if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
         if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
           mgr.processSetupMessage(wrappedARTMessage);
           return;
         } else if (UpdateMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
-          UpdateMessage updateMessage = wrappedARTMessage.unwrapAsUpdateMessage();
           mgr.processUpdateMessage(wrappedARTMessage);
           return;
         } else {
+            String originalBody;
           Log.w(TAG,"Message is ARTConversationMessage:"+wrappedConversationMessage.getOriginalBody());
           byte[] signature = wrappedConversationMessage.getSignature();
           boolean verifySign = mgr.verifyGroupIdSignature(mediaMessage.getGroupId().toString(), signature);
           Log.w(TAG, "Message has a valid Signature:"+verifySign);
-          String originalBody = wrappedConversationMessage.getOriginalBody();
+          if (verifySign) {
+              originalBody = wrappedConversationMessage.getOriginalBody();
+          } else {
+              originalBody = "Not verified member send: "+wrappedConversationMessage.getOriginalBody();
+          }
           if (originalBody!=null) {
             Optional<String> originalBodyOptional = Optional.fromNullable(originalBody);
             mediaMessage = new IncomingMediaMessage(Address.fromExternal(context, envelope.getSource()),
@@ -615,6 +645,17 @@ public class PushDecryptJob extends ContextJob {
           }
         }
       }
+    } else if (message.getGroupInfo().isPresent()){
+      Optional<String> newBody = Optional.fromNullable( "Group message received from non valid User: "+mediaMessage.getBody());
+      mediaMessage = new IncomingMediaMessage(Address.fromExternal(context, envelope.getSource()),
+              message.getTimestamp(), -1,
+              message.getExpiresInSeconds() * 1000L, false,
+              Optional.fromNullable(envelope.getRelay()),
+              newBody,
+              message.getGroupInfo(),
+              message.getAttachments(),
+              quote,
+              sharedContacts);
     }
 
 
@@ -715,37 +756,41 @@ public class PushDecryptJob extends ContextJob {
       handleExpirationUpdate(envelope, message, Optional.absent());
     }
 
+    ARTGroupManager mgr = ARTGroupManager.getInstance(context);
+
     // filter silent ART messages
-    if (body.startsWith(ARTGroupManager.ART_CONFIG_IDENTIFIER)){
+    if (mgr.isWrappedARTMessage(body)){
 
       envelope.getSourceAddress();
 
 
-      String wrappedSerialized = body.substring(ARTGroupManager.ART_CONFIG_IDENTIFIER.length());
-      Gson gson = new GsonBuilder().registerTypeAdapter(JsonARTMessage.class, new JsonMessageDeserializer()).create();
+      JsonARTMessage jsonARTMessage = mgr.deserializeWrappedMessage(body);
 
-      WrappedConversationMessage wrappedConversationMessage = gson.fromJson(wrappedSerialized, WrappedConversationMessage.class);
-      Log.w(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
+        if (WrappedConversationMessage.class.equals(jsonARTMessage.getClass())) {
+            WrappedConversationMessage wrappedConversationMessage = (WrappedConversationMessage) jsonARTMessage;
 
-      WrappedARTMessage wrappedARTMessage = gson.fromJson(wrappedSerialized, WrappedARTMessage.class);
-      Log.w(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
+            Log.i(TAG,"Conversation message received: "+wrappedConversationMessage.getOriginalBody());
 
-      ARTGroupManager mgr = ARTGroupManager.getInstance(null);
-      if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
-        if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
-          mgr.processSetupMessage(wrappedARTMessage);
-          return;
-        } else if (UpdateMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
-          mgr.processUpdateMessage(wrappedARTMessage);
-          return;
-        } else {
-          Log.w(TAG,"Message is ARTConversationMessage");
+            String groupId = wrappedConversationMessage.getGroupId();
 
-          String groupId = wrappedConversationMessage.getGroupId();
+            body = mgr.handleConversationMessage(wrappedConversationMessage,groupId );
+        } else if (jsonARTMessage.getClass().equals(WrappedARTMessage.class)) {
+                WrappedARTMessage wrappedARTMessage = mgr.deserializeMessage(body, WrappedARTMessage.class);
+                Log.w(TAG,"ART message received: "+wrappedARTMessage.getArtMessageClass());
 
-          body = mgr.handleConversationMessage(wrappedConversationMessage,groupId );
+                if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
+                    if (SetupMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
+                        mgr.processSetupMessage(wrappedARTMessage);
+                        return;
+                    } else if (UpdateMessage.class.getSimpleName().equals(wrappedARTMessage.getArtMessageClass())) {
+                        mgr.processUpdateMessage(wrappedARTMessage);
+                        return;
+                    }
+            }
         }
-      }
+    } else if (message.getGroupInfo().isPresent()){
+      String newBody =  "Group message received from invalid User: "+message.getBody();
+      body = newBody;
     }
 
     Long threadId;
@@ -1052,5 +1097,35 @@ public class PushDecryptJob extends ContextJob {
     } else {
       return Recipient.from(context, Address.fromExternal(context, envelope.getSource()), false);
     }
+  }
+
+  private void createAdministrativeTextMessage(SignalServiceEnvelope envelope, SignalServiceDataMessage message, Optional<Long> smsMessageId, String newBody){
+    if (newBody == null) {
+      newBody = "Group update message received from invalid user";
+    }
+
+    Long threadId;
+    SmsDatabase database  = DatabaseFactory.getSmsDatabase(context);
+
+    IncomingTextMessage textMessage = new IncomingTextMessage(Address.fromExternal(context, envelope.getSource()),
+            envelope.getSourceDevice(),
+            System.currentTimeMillis(), newBody,
+            message.getGroupInfo(),
+            message.getExpiresInSeconds() * 1000L);
+
+    textMessage = new IncomingEncryptedMessage(textMessage, newBody);
+
+    Optional<InsertResult> insertResult = database.insertMessageInbox(textMessage);
+
+    if (insertResult.isPresent()) threadId = insertResult.get().getThreadId();
+    else                          threadId = null;
+
+    if (smsMessageId.isPresent()) database.deleteMessage(smsMessageId.get());
+
+
+    if (threadId != null) {
+      MessageNotifier.updateNotification(context, threadId);
+    }
+    return;
   }
 }

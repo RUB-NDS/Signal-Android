@@ -36,6 +36,7 @@ import org.whispersystems.signalservice.api.messages.SignalServiceEnvelope;
 import org.whispersystems.signalservice.api.messages.SignalServiceGroup;
 import org.whispersystems.signalservice.api.messages.SignalServiceGroup.Type;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -209,6 +210,9 @@ public class GroupMessageProcessor {
     GroupDatabase database = DatabaseFactory.getGroupDatabase(context);
     String        id       = GroupUtil.getEncodedId(group.getGroupId(), false);
     List<Address> members  = record.getMembers();
+
+    GroupARTDatabase groupARTDatabase = DatabaseFactory.getGroupARTDatabase(context);
+    groupARTDatabase.delete(id);
 
     GroupContext.Builder builder = createGroupContext(group);
     builder.setType(GroupContext.Type.QUIT);

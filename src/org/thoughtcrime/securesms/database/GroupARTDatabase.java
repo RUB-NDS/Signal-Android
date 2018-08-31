@@ -63,8 +63,8 @@ public class GroupARTDatabase extends Database {
     {
         ContentValues contentValues = new ContentValues();
         contentValues.put(GROUP_ID, groupId);
-        byte[] serizalizedART = ARTStateSerializer.getInstance().toByteArray(state);
-        contentValues.put(ART_STATE, serizalizedART);
+        byte[] serializedART = ARTStateSerializer.getInstance().toByteArray(state);
+        contentValues.put(ART_STATE, serializedART);
 
         databaseHelper.getWritableDatabase().insert(TABLE_NAME, null, contentValues);
     }

@@ -26,6 +26,8 @@ public class JsonMessageDeserializer implements JsonDeserializer<JsonARTMessage>
             return context.deserialize(json,WrappedARTMessage.class);
         } else if(WrappedConversationMessage.class.getSimpleName().equals(messageClass)) {
             return context.deserialize(json,WrappedConversationMessage.class);
+        } else if (WrappedARTGroupContext.class.getSimpleName().equals(messageClass)) {
+            return context.deserialize(json,WrappedARTGroupContext.class);
         }
 
         return null;
