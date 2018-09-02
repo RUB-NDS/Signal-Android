@@ -58,7 +58,8 @@ public class GroupMessageProcessor {
   public static @Nullable Long process(@NonNull Context context,
                                        @NonNull SignalServiceEnvelope envelope,
                                        @NonNull SignalServiceDataMessage message,
-                                       boolean outgoing)
+                                       boolean outgoing,
+                                       boolean validated)
   {//Wichtig: Nur Nachrichten mit GroupID oder nicht ex. groupInfo akzeptiert
     if (!message.getGroupInfo().isPresent() || message.getGroupInfo().get().getGroupId() == null) {
       Log.w(TAG, "Received group message with no id! Ignoring...");
@@ -71,7 +72,12 @@ public class GroupMessageProcessor {
     Optional<GroupRecord> record   = database.getGroup(id);
 
     if (record.isPresent() && group.getType() == Type.UPDATE) { //Wichtig: GroupREcord existiert & Typ=Update
-      return handleGroupUpdate(context, envelope, group, record.get(), outgoing); //GroupUpdate mit hole Record
+      if (validated) {
+        return handleGroupUpdate(context, envelope, group, record.get(), outgoing); //GroupUpdate mit hole Record
+      } else {
+        Log.w(TAG, "Ignoring unauthorized update message");
+        return null;
+      }
     } else if (!record.isPresent() && group.getType() == Type.UPDATE) {// GroupRecord existiert nicht und Typ=Update
       return handleGroupCreate(context, envelope, group, outgoing); //GroupUpdate ohne hole Record
     } else if (record.isPresent() && group.getType() == Type.QUIT) { //Record existiert und Typ=Quit

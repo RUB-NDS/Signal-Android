@@ -67,7 +67,7 @@ public class OutgoingGroupMediaMessage extends OutgoingSecureMediaMessage {
     wrappedARTGroupContext.setGroupContext(Base64.encodeBytes(group.toByteArray()));
 
     wrappedARTGroupContext.setSignature(artGrpM.signGroupId(groupId));
-    wrappedARTGroupContext.setGroupId(groupId);
+    wrappedARTGroupContext.setGroupID(groupId);
 
     String wrappedMessage = artGrpM.serializeWrappedMessage(wrappedARTGroupContext);
 

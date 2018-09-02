@@ -405,12 +405,15 @@ public class ARTGroupManager {
             Log.w(LOG_TAG,"No art state found - verifying fake signature!");
             return false;
         } else {
+            byte[] oldsecret = optGrpState.get().getStageKey();
+
             updateStageKey(optGrpState);
             byte[] secret = optGrpState.get().getStageKey();
             byte[] verifySignature = Crypto.hmacSha256(groupId.getBytes(),secret);
             boolean verified = Arrays.equals(signature,verifySignature);
+            boolean oldverified = Arrays.equals(signature, Crypto.hmacSha256(groupId.getBytes(), oldsecret));
 
-            Log.w(LOG_TAG,"art state found: signature verification: "+verified);
+            Log.w(LOG_TAG,"art state found: signature verification: "+verified +":"+oldverified);
 
             return verified;
         }
@@ -704,7 +707,7 @@ public class ARTGroupManager {
             // cannot happen
         }
         byte[] signature = wrappedARTGroupContext.getSignature();
-        boolean verified = verifyGroupIdSignature(groupContext.getId().toString(),signature);
+        boolean verified = verifyGroupIdSignature(wrappedARTGroupContext.getGroupID(),signature);
         if (verified){
             return groupContext;
         } else {

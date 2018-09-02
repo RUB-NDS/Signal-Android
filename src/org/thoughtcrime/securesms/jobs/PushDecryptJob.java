@@ -412,23 +412,22 @@ public class PushDecryptJob extends ContextJob {
       Log.w(TAG,"Wrapped Group Update message received");
 
       if (!envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))) {
-        if (SetupMessage.class.getSimpleName().equals(WrappedARTGroupContext.class)) {
-          SignalServiceProtos.GroupContext groupContext = mgr.processGroupUpdateMessage(wrappedARTGroupContext);
-          if (groupContext == null) {
-            createAdministrativeTextMessage(envelope, message, smsMessageId, "Invalid Signature for Group Update. Ignorign!");
-          }else {
-            validated = true;
-          }
+        SignalServiceProtos.GroupContext groupContext = mgr.processGroupUpdateMessage(wrappedARTGroupContext);
+        if (groupContext == null) {
+          Log.w(TAG,"Group update message not valid");
+          createAdministrativeTextMessage(envelope, message, smsMessageId, "Invalid Signature for Group Update. Ignoring!");
+        } else {
+          validated = true;
         }
       }
-    } else if (message.getGroupInfo().isPresent()){
+    } else if (message.getGroupInfo().isPresent() && !envelope.getSourceAddress().equals(Address.fromSerialized(TextSecurePreferences.getLocalNumber(context)))){
       Log.i(TAG,"non ART messageBody: "+body);
-      createAdministrativeTextMessage(envelope, message, smsMessageId, "received unauthenticated group update! Ignorign!");
+      createAdministrativeTextMessage(envelope, message, smsMessageId, "received unauthenticated group update! Ignoring!");
 
     }
-    if (validated) {
-      GroupMessageProcessor.process(context, envelope, message, false); //Rufe GroupMessageProcessor auf
-    }
+    /*if (validated) {*/
+      GroupMessageProcessor.process(context, envelope, message, false, validated); //Rufe GroupMessageProcessor auf
+    //}
 
     if (message.getExpiresInSeconds() != 0 && message.getExpiresInSeconds() != getMessageDestination(envelope, message).getExpireMessages()) {
       handleExpirationUpdate(envelope, message, Optional.absent());
@@ -488,7 +487,7 @@ public class PushDecryptJob extends ContextJob {
     if (message.getMessage().isEndSession()) { //falls Nachricht Beenden iniziieren soll
       threadId = handleSynchronizeSentEndSessionMessage(message);//behandle SynchronizeSentEndSession
     } else if (message.getMessage().isGroupUpdate()) {//Falls Nachricht Gruppenupdate
-      threadId = GroupMessageProcessor.process(context, envelope, message.getMessage(), true); //threadID = GroupMessageProcessor
+      threadId = GroupMessageProcessor.process(context, envelope, message.getMessage(), true, true); //threadID = GroupMessageProcessor
     } else if (message.getMessage().isExpirationUpdate()) {
       threadId = handleSynchronizeSentExpirationUpdate(message);
     } else if (message.getMessage().getAttachments().isPresent() || message.getMessage().getQuote().isPresent()) {
@@ -646,7 +645,7 @@ public class PushDecryptJob extends ContextJob {
         }
       }
     } else if (message.getGroupInfo().isPresent()){
-      Optional<String> newBody = Optional.fromNullable( "Group message received from non valid User: "+mediaMessage.getBody());
+      Optional<String> newBody = Optional.fromNullable( "Group message received from non valid User: "+mediaMessage.getBody().toString());
       mediaMessage = new IncomingMediaMessage(Address.fromExternal(context, envelope.getSource()),
               message.getTimestamp(), -1,
               message.getExpiresInSeconds() * 1000L, false,
@@ -1126,6 +1125,6 @@ public class PushDecryptJob extends ContextJob {
     if (threadId != null) {
       MessageNotifier.updateNotification(context, threadId);
     }
-    return;
+
   }
 }
