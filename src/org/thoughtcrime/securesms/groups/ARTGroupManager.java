@@ -388,7 +388,7 @@ public class ARTGroupManager {
         } else {
             updateStageKey(optGrpState);
             byte[] secret = optGrpState.get().getStageKey();
-
+            artDb.update(groupId, optGrpState.get());
             Log.w(LOG_TAG,"Secret: "+hexDump(secret));
 
             return Crypto.hmacSha256(groupId.getBytes(),secret);
@@ -414,6 +414,7 @@ public class ARTGroupManager {
             boolean oldverified = Arrays.equals(signature, Crypto.hmacSha256(groupId.getBytes(), oldsecret));
 
             Log.w(LOG_TAG,"art state found: signature verification: "+verified +":"+oldverified);
+            artDb.update(groupId, optGrpState.get());
 
             return verified;
         }

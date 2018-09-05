@@ -1,9 +1,18 @@
 package org.thoughtcrime.securesms.groups.protocol;
 
-
+/**
+ * encapsulates a GroupContext in a JSON Message.
+ * This type of message is sent when the client does a group update
+ *
+ */
 public class WrappedARTGroupContext extends JsonARTMessage {
+    // base64 serialized groupContext (uses existing serialization mechanism)
     private String groupContext;
+
+    // signature of the message ( as usually the HMAC of the groupId under the stageKey
     private byte[] signature;
+
+    // related groupID
     private String groupID;
 
     public String getGroupID() {
