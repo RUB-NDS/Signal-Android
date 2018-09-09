@@ -79,11 +79,8 @@ public class ARTGroupManager {
     private Context ctx;
 
     private GroupARTDatabase artDb;
-    //private IdentityDatabase identityDb;
     private SessionDatabase sessionDb;
 
-    //private MmsDatabase mmsDb;
-    //private ARTStateSerializer stateSerializer;
     private Gson gson;
 
     private static ARTGroupManager instance;
@@ -108,11 +105,7 @@ public class ARTGroupManager {
         this.ctx = ctx;
 
         this.artDb = DatabaseFactory.getGroupARTDatabase(ctx);
-       // this.mmsDb =  DatabaseFactory.getMmsDatabase(ctx);
-       // this.identityDb =  DatabaseFactory.getIdentityDatabase(ctx);
         this.sessionDb = DatabaseFactory.getSessionDatabase(ctx);
-
-       // this.stateSerializer = ARTStateSerializer.getInstance();
 
         this.gson = new GsonBuilder()
                 .registerTypeAdapter(JsonARTMessage.class,new JsonMessageDeserializer())
@@ -221,8 +214,6 @@ public class ARTGroupManager {
             throw new IllegalStateException("Message is not a setup message");
         }
 
-        //Optional<GroupDatabase.GroupRecord> optionalGroup = DatabaseFactory.getGroupDatabase(ctx).getGroup(groupId);
-
         Optional<ARTState> optArtState = artDb.getARTState(groupId);
 
         if (! optArtState.isPresent()) {
@@ -232,7 +223,7 @@ public class ARTGroupManager {
 
             IdentityKeyPair myIdKeyPair = IdentityKeyUtil.getIdentityKeyPair(ctx);
 
-            // TODO: use real ephemeral keys - but how?
+            // TODO: use real ephemeral keys
 
             DHKeyPair dhIdKey = convertToDHKeyPair(myIdKeyPair.getPrivateKey());
             DHKeyPair dhPreKey = dhIdKey;
@@ -319,16 +310,6 @@ public class ARTGroupManager {
         artDb.update(groupID, optState.get());
     }
 
-    public WrappedARTMessage createUpdateMessage(String groupID, int peerNo, ARTState myArtState) {
-        throw new IllegalStateException("not implemented");
-    }
-
-    public ARTState setupInitialART(int peerNum, int peerCount) {
-
-        ARTState state = new ARTState(peerNum,peerCount);
-
-        return state;
-    }
 
     public String serializeWrappedMessage(JsonARTMessage msg) {
         return ART_CONFIG_IDENTIFIER+gson.toJson(msg);
@@ -348,33 +329,6 @@ public class ARTGroupManager {
 
         } else {
             return rawBody;
-        }
-    }
-
-    public String filterBody(IncomingTextMessage message) {
-
-        return filterBody(message.getMessageBody());
-    }
-
-    public void checkMessage(IncomingTextMessage textMessage) {
-        Log.d(LOG_TAG,"checking incoming message");
-
-        final String body = textMessage.getMessageBody();
-
-        boolean isWrapped = isWrappedARTMessage(body);
-
-        Log.d(LOG_TAG,"is Secure?: "+ textMessage.isSecureMessage());
-        Log.d(LOG_TAG,"is ART Message?: "+isWrapped);
-        Log.d(LOG_TAG,"Body: "+body);
-
-        if (isWrapped) {
-            JsonARTMessage jsonMsg = deserializeWrappedMessage(textMessage.getMessageBody());
-
-            if ( jsonMsg instanceof WrappedConversationMessage) {
-                WrappedConversationMessage conversationMessage = (WrappedConversationMessage) jsonMsg;
-                boolean checkResult = verifyGroupIdSignature(String.valueOf(textMessage.getGroupId()),conversationMessage.getSignature());
-                Log.w(LOG_TAG,"Signature check: "+checkResult);
-            }
         }
     }
 

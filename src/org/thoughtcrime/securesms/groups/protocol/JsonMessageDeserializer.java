@@ -28,10 +28,6 @@ public class JsonMessageDeserializer implements JsonDeserializer<JsonARTMessage>
         JsonElement messageClassElement = obj.get("jsonMessageClass");
         String messageClass = messageClassElement.getAsString();
 
-        /*if (GroupSetupBroadcastMessage.class.getSimpleName().equals(messageClass)) {
-            return context.deserialize(json, GroupSetupBroadcastMessage.class);
-        } else */
-
         // compare the jsonMessageClass attribute to the well known classes
         // to do the correct deserialization
         if (WrappedARTMessage.class.getSimpleName().equals(messageClass)) {
