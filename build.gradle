@@ -59,8 +59,13 @@ repositories {
 }
 
 dependencies {
-    compile files('libs/asynchronousratchetingtree-1.0-SNAPSHOT.jar')
+    compile files('java-libs/asynchronousratchetingtree-1.0-SNAPSHOT.jar')
+    compile files('java-libs/thrift-1.0-SNAPSHOT.jar')
+    compile 'org.iq80.snappy:snappy:0.3'
 
+    compile 'org.slf4j:slf4j-android:1.6.1-RC1'
+
+    compile 'org.zeromq:curve25519-java:0.1.0'
     compile 'com.android.support:appcompat-v7:27.0.2'
     compile 'com.android.support:recyclerview-v7:27.0.2'
     compile 'com.android.support:design:27.0.2'
@@ -296,6 +301,7 @@ android {
         exclude 'asm-license.txt'
         exclude 'META-INF/LICENSE'
         exclude 'META-INF/NOTICE'
+	exclude 'META-INF/DEPENDENCIES'
     }
 
     signingConfigs {
@@ -323,6 +329,7 @@ android {
                           'proguard-retrolambda.pro',
                           'proguard-okhttp.pro',
                           'proguard-ez-vcard.pro',
+                          'proguard-art.pro',
                           'proguard.cfg'
             testProguardFiles 'proguard-automation.pro',
                           'proguard.cfg'
